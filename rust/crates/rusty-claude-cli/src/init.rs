@@ -8,8 +8,8 @@ const STARTER_CLAUDE_JSON: &str = concat!(
     "  }\n",
     "}\n",
 );
-const GITIGNORE_COMMENT: &str = "# Claw Code local artifacts";
-const GITIGNORE_ENTRIES: [&str; 2] = [".claude/settings.local.json", ".claude/sessions/"];
+const GITIGNORE_COMMENT: &str = "# Sebas local artifacts";
+const GITIGNORE_ENTRIES: [&str; 2] = [".codex/settings.local.json", ".codex/sessions/"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InitStatus {
@@ -80,15 +80,15 @@ struct RepoDetection {
 pub(crate) fn initialize_repo(cwd: &Path) -> Result<InitReport, Box<dyn std::error::Error>> {
     let mut artifacts = Vec::new();
 
-    let claude_dir = cwd.join(".claude");
+    let claude_dir = cwd.join(".codex");
     artifacts.push(InitArtifact {
-        name: ".claude/",
+        name: ".codex/",
         status: ensure_dir(&claude_dir)?,
     });
 
-    let claude_json = cwd.join(".claude.json");
+    let claude_json = cwd.join(".codex").join("settings.json");
     artifacts.push(InitArtifact {
-        name: ".claude.json",
+        name: ".codex/settings.json",
         status: write_file_if_missing(&claude_json, STARTER_CLAUDE_JSON)?,
     });
 
@@ -164,7 +164,7 @@ pub(crate) fn render_init_claude_md(cwd: &Path) -> String {
     let mut lines = vec![
         "# CLAUDE.md".to_string(),
         String::new(),
-        "This file provides guidance to Claw Code (clawcode.dev) when working with code in this repository.".to_string(),
+        "This file provides guidance to the Sebas / Codex-compatible agent runtime when working with code in this repository.".to_string(),
         String::new(),
     ];
 
@@ -209,7 +209,7 @@ pub(crate) fn render_init_claude_md(cwd: &Path) -> String {
 
     lines.push("## Working agreement".to_string());
     lines.push("- Prefer small, reviewable changes and keep generated bootstrap files aligned with actual repo workflows.".to_string());
-    lines.push("- Keep shared defaults in `.claude.json`; reserve `.claude/settings.local.json` for machine-local overrides.".to_string());
+    lines.push("- Keep shared defaults in `.codex/settings.json`; reserve `.codex/settings.local.json` for machine-local overrides.".to_string());
     lines.push("- Do not overwrite existing `CLAUDE.md` content automatically; update it intentionally when repo workflows change.".to_string());
     lines.push(String::new());
 
@@ -354,15 +354,16 @@ mod tests {
 
         let report = initialize_repo(&root).expect("init should succeed");
         let rendered = report.render();
-        assert!(rendered.contains(".claude/         created"));
-        assert!(rendered.contains(".claude.json     created"));
+        assert!(rendered.contains(".codex/          created"));
+        assert!(rendered.contains(".codex/settings.json created"));
         assert!(rendered.contains(".gitignore       created"));
         assert!(rendered.contains("CLAUDE.md        created"));
-        assert!(root.join(".claude").is_dir());
-        assert!(root.join(".claude.json").is_file());
+        assert!(root.join(".codex").is_dir());
+        assert!(root.join(".codex").join("settings.json").is_file());
         assert!(root.join("CLAUDE.md").is_file());
         assert_eq!(
-            fs::read_to_string(root.join(".claude.json")).expect("read claude json"),
+            fs::read_to_string(root.join(".codex").join("settings.json"))
+                .expect("read settings json"),
             concat!(
                 "{\n",
                 "  \"permissions\": {\n",
@@ -372,11 +373,12 @@ mod tests {
             )
         );
         let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read gitignore");
-        assert!(gitignore.contains(".claude/settings.local.json"));
-        assert!(gitignore.contains(".claude/sessions/"));
+        assert!(gitignore.contains(".codex/settings.local.json"));
+        assert!(gitignore.contains(".codex/sessions/"));
         let claude_md = fs::read_to_string(root.join("CLAUDE.md")).expect("read claude md");
         assert!(claude_md.contains("Languages: Rust."));
         assert!(claude_md.contains("cargo clippy --workspace --all-targets -- -D warnings"));
+        assert!(claude_md.contains(".codex/settings.json"));
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
@@ -386,7 +388,7 @@ mod tests {
         let root = temp_dir();
         fs::create_dir_all(&root).expect("create root");
         fs::write(root.join("CLAUDE.md"), "custom guidance\n").expect("write existing claude md");
-        fs::write(root.join(".gitignore"), ".claude/settings.local.json\n")
+        fs::write(root.join(".gitignore"), ".codex/settings.local.json\n")
             .expect("write gitignore");
 
         let first = initialize_repo(&root).expect("first init should succeed");
@@ -395,8 +397,8 @@ mod tests {
             .contains("CLAUDE.md        skipped (already exists)"));
         let second = initialize_repo(&root).expect("second init should succeed");
         let second_rendered = second.render();
-        assert!(second_rendered.contains(".claude/         skipped (already exists)"));
-        assert!(second_rendered.contains(".claude.json     skipped (already exists)"));
+        assert!(second_rendered.contains(".codex/          skipped (already exists)"));
+        assert!(second_rendered.contains(".codex/settings.json skipped (already exists)"));
         assert!(second_rendered.contains(".gitignore       skipped (already exists)"));
         assert!(second_rendered.contains("CLAUDE.md        skipped (already exists)"));
         assert_eq!(
@@ -404,8 +406,8 @@ mod tests {
             "custom guidance\n"
         );
         let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read gitignore");
-        assert_eq!(gitignore.matches(".claude/settings.local.json").count(), 1);
-        assert_eq!(gitignore.matches(".claude/sessions/").count(), 1);
+        assert_eq!(gitignore.matches(".codex/settings.local.json").count(), 1);
+        assert_eq!(gitignore.matches(".codex/sessions/").count(), 1);
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }

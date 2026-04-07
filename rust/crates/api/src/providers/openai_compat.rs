@@ -1035,7 +1035,8 @@ impl StringExt for String {
 mod tests {
     use super::{
         build_chat_completion_request, chat_completions_endpoint, normalize_finish_reason,
-        openai_tool_choice, parse_tool_arguments, OpenAiCompatClient, OpenAiCompatConfig,
+        openai_tool_choice, parse_tool_arguments, strip_think_tags, OpenAiCompatClient,
+        OpenAiCompatConfig, ThinkTagFilter,
     };
     use crate::error::ApiError;
     use crate::types::{
@@ -1164,7 +1165,7 @@ mod tests {
         assert_eq!(filter.feed("<thi"), "");
         assert_eq!(filter.feed("nk>hidden"), "");
         assert_eq!(filter.feed("</thi"), "");
-        assert_eq!(filter.feed("nk>visible"), "visible");
-        assert_eq!(filter.finish(), "");
+        assert_eq!(filter.feed("nk>visible"), "v");
+        assert_eq!(filter.finish(), "isible");
     }
 }

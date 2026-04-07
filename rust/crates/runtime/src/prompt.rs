@@ -3,7 +3,8 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::config::{ConfigError, ConfigLoader, RuntimeConfig};
+use crate::config::{ConfigError, RuntimeConfig};
+use crate::surface;
 
 #[derive(Debug)]
 pub enum PromptBuildError {
@@ -36,8 +37,8 @@ impl From<ConfigError> for PromptBuildError {
 
 pub const SYSTEM_PROMPT_DYNAMIC_BOUNDARY: &str = "__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__";
 pub const FRONTIER_MODEL_NAME: &str = "Claude Opus 4.6";
-const MAX_INSTRUCTION_FILE_CHARS: usize = 4_000;
-const MAX_TOTAL_INSTRUCTION_CHARS: usize = 12_000;
+const MAX_INSTRUCTION_FILE_CHARS: usize = 2_000;
+const MAX_TOTAL_INSTRUCTION_CHARS: usize = 6_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContextFile {
@@ -200,12 +201,7 @@ fn discover_instruction_files(cwd: &Path) -> std::io::Result<Vec<ContextFile>> {
 
     let mut files = Vec::new();
     for dir in directories {
-        for candidate in [
-            dir.join("CLAUDE.md"),
-            dir.join("CLAUDE.local.md"),
-            dir.join(".claw").join("CLAUDE.md"),
-            dir.join(".claw").join("instructions.md"),
-        ] {
+        for candidate in surface::instruction_candidates(&dir) {
             push_context_file(&mut files, candidate)?;
         }
     }
@@ -408,12 +404,10 @@ pub fn load_system_prompt(
     os_version: impl Into<String>,
 ) -> Result<Vec<String>, PromptBuildError> {
     let cwd = cwd.into();
-    let project_context = ProjectContext::discover_with_git(&cwd, current_date.into())?;
-    let config = ConfigLoader::default_for(&cwd).load()?;
+    let project_context = ProjectContext::discover(&cwd, current_date.into())?;
     Ok(SystemPromptBuilder::new()
         .with_os(os_name, os_version)
         .with_project_context(project_context)
-        .with_runtime_config(config)
         .build())
 }
 
@@ -440,7 +434,7 @@ fn render_config_section(config: &RuntimeConfig) -> String {
 
 fn get_simple_intro_section(has_output_style: bool) -> String {
     format!(
-        "You are an interactive agent that helps users {} Use the instructions below and the tools available to you to assist the user.\n\nIMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.",
+        "You are a local coding agent that helps users {} Use the instructions below and the tools available to inspect code, edit files, and verify changes. When the request concerns this repository, prefer concrete actions over long explanations and keep the response focused on the result.\n\nIMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.",
         if has_output_style {
             "according to your \"Output Style\" below, which describes how you should respond to user queries."
         } else {
@@ -467,7 +461,8 @@ fn get_simple_system_section() -> String {
 
 fn get_simple_doing_tasks_section() -> String {
     let items = prepend_bullets(vec![
-        "Read relevant code before changing it and keep changes tightly scoped to the request.".to_string(),
+        "Inspect relevant code, configs, and tests before making changes.".to_string(),
+        "Prefer the smallest correct edit that solves the request end to end.".to_string(),
         "Do not add speculative abstractions, compatibility shims, or unrelated cleanup.".to_string(),
         "Do not create files unless they are required to complete the task.".to_string(),
         "If an approach fails, diagnose the failure before switching tactics.".to_string(),
@@ -484,7 +479,7 @@ fn get_simple_doing_tasks_section() -> String {
 fn get_actions_section() -> String {
     [
         "# Executing actions with care".to_string(),
-        "Carefully consider reversibility and blast radius. Local, reversible actions like editing files or running tests are usually fine. Actions that affect shared systems, publish state, delete data, or otherwise have high blast radius should be explicitly authorized by the user or durable workspace instructions.".to_string(),
+        "Local, reversible actions like editing files or running tests are expected. Actions that affect shared systems, publish state, delete data, or otherwise have high blast radius should be explicitly authorized by the user or durable workspace instructions.".to_string(),
     ]
     .join("\n")
 }
@@ -563,6 +558,44 @@ mod tests {
                 "nested instructions"
             ]
         );
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn codex_instruction_files_are_preferred_before_legacy_roots() {
+        let root = temp_dir();
+        let nested = root.join("apps").join("api");
+        fs::create_dir_all(nested.join(".codex")).expect("nested codex dir");
+        fs::create_dir_all(nested.join(".claw")).expect("nested claw dir");
+        fs::create_dir_all(nested.join(".claude")).expect("nested claude dir");
+        fs::write(
+            nested.join(".codex").join("instructions.md"),
+            "codex instructions",
+        )
+        .expect("write codex instructions");
+        fs::write(
+            nested.join(".claw").join("instructions.md"),
+            "claw instructions",
+        )
+        .expect("write claw instructions");
+        fs::write(
+            nested.join(".claude").join("instructions.md"),
+            "claude instructions",
+        )
+        .expect("write claude instructions");
+
+        let context = ProjectContext::discover(&nested, "2026-03-31").expect("context should load");
+        let contents = context
+            .instruction_files
+            .iter()
+            .map(|file| file.content.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            contents,
+            vec!["codex instructions", "claw instructions", "claude instructions"]
+        );
+
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 
@@ -676,45 +709,23 @@ mod tests {
     }
 
     #[test]
-    fn load_system_prompt_reads_claude_files_and_config() {
+    fn load_system_prompt_reads_claude_files() {
         let root = temp_dir();
         fs::create_dir_all(root.join(".claw")).expect("claw dir");
         fs::write(root.join("CLAUDE.md"), "Project rules").expect("write instructions");
-        fs::write(
-            root.join(".claw").join("settings.json"),
-            r#"{"permissionMode":"acceptEdits"}"#,
-        )
-        .expect("write settings");
 
         let _guard = env_lock();
         ensure_valid_cwd();
         let previous = std::env::current_dir().expect("cwd");
-        let original_home = std::env::var("HOME").ok();
-        let original_claw_home = std::env::var("CLAW_CONFIG_HOME").ok();
-        std::env::set_var("HOME", &root);
-        std::env::set_var("CLAW_CONFIG_HOME", root.join("missing-home"));
         std::env::set_current_dir(&root).expect("change cwd");
         let prompt = super::load_system_prompt(&root, "2026-03-31", "linux", "6.8")
             .expect("system prompt should load")
-            .join(
-                "
-
-",
-            );
+            .join("\n\n");
         std::env::set_current_dir(previous).expect("restore cwd");
-        if let Some(value) = original_home {
-            std::env::set_var("HOME", value);
-        } else {
-            std::env::remove_var("HOME");
-        }
-        if let Some(value) = original_claw_home {
-            std::env::set_var("CLAW_CONFIG_HOME", value);
-        } else {
-            std::env::remove_var("CLAW_CONFIG_HOME");
-        }
 
+        assert!(prompt.contains("local coding agent"));
         assert!(prompt.contains("Project rules"));
-        assert!(prompt.contains("permissionMode"));
+        assert!(!prompt.contains("Runtime config"));
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 

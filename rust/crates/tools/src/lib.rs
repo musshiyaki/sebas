@@ -1,3 +1,5 @@
+mod git_tools;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -871,27 +873,27 @@ fn run_web_search(input: WebSearchInput) -> Result<String, String> {
 }
 
 fn run_git_status(input: GitStatusInput) -> Result<String, String> {
-    to_pretty_json(execute_git_status(input)?)
+    to_pretty_json(git_tools::execute_git_status(input)?)
 }
 
 fn run_git_diff(input: GitDiffInput) -> Result<String, String> {
-    to_pretty_json(execute_git_diff(input)?)
+    to_pretty_json(git_tools::execute_git_diff(input)?)
 }
 
 fn run_git_commit(input: GitCommitInput) -> Result<String, String> {
-    to_pretty_json(execute_git_commit(input)?)
+    to_pretty_json(git_tools::execute_git_commit(input)?)
 }
 
 fn run_git_branch(input: GitBranchInput) -> Result<String, String> {
-    to_pretty_json(execute_git_branch(input)?)
+    to_pretty_json(git_tools::execute_git_branch(input)?)
 }
 
 fn run_git_push(input: GitPushInput) -> Result<String, String> {
-    to_pretty_json(execute_git_push(input)?)
+    to_pretty_json(git_tools::execute_git_push(input)?)
 }
 
 fn run_git_pull_request(input: GitPullRequestInput) -> Result<String, String> {
-    to_pretty_json(execute_git_pull_request(input)?)
+    to_pretty_json(git_tools::execute_git_pull_request(input)?)
 }
 
 fn run_todo_write(input: TodoWriteInput) -> Result<String, String> {
@@ -1484,135 +1486,6 @@ fn execute_web_search(input: &WebSearchInput) -> Result<WebSearchOutput, String>
         ],
         duration_seconds: started.elapsed().as_secs_f64(),
     })
-}
-
-#[derive(Debug, Serialize)]
-struct GitToolOutput {
-    command: String,
-    stdout: String,
-    stderr: String,
-}
-
-fn execute_git_status(_input: GitStatusInput) -> Result<GitToolOutput, String> {
-    execute_git_command("git status --short --branch".to_string())
-}
-
-fn execute_git_diff(input: GitDiffInput) -> Result<GitToolOutput, String> {
-    let mut command = String::from("git diff --no-ext-diff --stat");
-    if input.staged.unwrap_or(false) {
-        command.push_str(" --cached");
-    }
-    if let Some(pathspec) = input.pathspec.filter(|items| !items.is_empty()) {
-        command.push_str(" --");
-        for item in pathspec {
-            command.push(' ');
-            command.push_str(&shell_escape(&item));
-        }
-    }
-    execute_git_command(command)
-}
-
-fn execute_git_commit(input: GitCommitInput) -> Result<GitToolOutput, String> {
-    let message = input.message.trim();
-    if message.is_empty() {
-        return Err("git commit message must not be empty".to_string());
-    }
-    let mut command = String::from("git commit");
-    if input.all.unwrap_or(false) {
-        command.push_str(" -a");
-    }
-    command.push_str(" -m ");
-    command.push_str(&shell_escape(message));
-    execute_git_command(command)
-}
-
-fn execute_git_branch(input: GitBranchInput) -> Result<GitToolOutput, String> {
-    let mut command = if input.checkout.unwrap_or(true) {
-        String::from("git checkout")
-    } else {
-        String::from("git branch")
-    };
-    command.push(' ');
-    if input.checkout.unwrap_or(true) && input.base.is_some() {
-        command.push_str("-b ");
-    }
-    command.push_str(&shell_escape(input.name.trim()));
-    if let Some(base) = input.base.filter(|value| !value.trim().is_empty()) {
-        command.push(' ');
-        command.push_str(&shell_escape(base.trim()));
-    }
-    execute_git_command(command)
-}
-
-fn execute_git_push(input: GitPushInput) -> Result<GitToolOutput, String> {
-    let mut command = String::from("git push");
-    if input.set_upstream.unwrap_or(true) {
-        command.push_str(" --set-upstream");
-    }
-    command.push(' ');
-    command.push_str(&shell_escape(input.remote.as_deref().unwrap_or("origin")));
-    if let Some(branch) = input.branch.filter(|value| !value.trim().is_empty()) {
-        command.push(' ');
-        command.push_str(&shell_escape(branch.trim()));
-    }
-    execute_git_command(command)
-}
-
-fn execute_git_pull_request(input: GitPullRequestInput) -> Result<GitToolOutput, String> {
-    let mut command = String::from("gh pr create");
-    if input.draft.unwrap_or(true) {
-        command.push_str(" --draft");
-    }
-    if let Some(title) = input.title.filter(|value| !value.trim().is_empty()) {
-        command.push_str(" --title ");
-        command.push_str(&shell_escape(title.trim()));
-    }
-    if let Some(body) = input.body.filter(|value| !value.trim().is_empty()) {
-        command.push_str(" --body ");
-        command.push_str(&shell_escape(body.trim()));
-    }
-    execute_git_command(command)
-}
-
-fn execute_git_command(command: String) -> Result<GitToolOutput, String> {
-    let output = execute_bash(BashCommandInput {
-        command: command.clone(),
-        timeout: Some(60_000),
-        description: Some("git tool".to_string()),
-        run_in_background: Some(false),
-        dangerously_disable_sandbox: Some(true),
-        namespace_restrictions: Some(false),
-        isolate_network: Some(false),
-        filesystem_mode: None,
-        allowed_mounts: None,
-    })
-    .map_err(|error| error.to_string())?;
-
-    if let Some(return_code) = output.return_code_interpretation.as_deref() {
-        if return_code != "timeout" {
-            let stderr = output.stderr.trim();
-            let stdout = output.stdout.trim();
-            let summary = if !stderr.is_empty() {
-                stderr
-            } else if !stdout.is_empty() {
-                stdout
-            } else {
-                return_code
-            };
-            return Err(format!("git command failed: {summary}"));
-        }
-    }
-
-    Ok(GitToolOutput {
-        command,
-        stdout: output.stdout,
-        stderr: output.stderr,
-    })
-}
-
-fn shell_escape(value: &str) -> String {
-    let escaped = value.replace('\'', "'\"'\"'");
-    format!("'{escaped}'")
 }
 
 fn build_http_client() -> Result<Client, String> {
@@ -4558,7 +4431,7 @@ mod tests {
     fn skill_loads_local_skill_prompt() {
         let _guard = env_lock().lock().expect("env lock should acquire");
         let home = temp_path("skills-home");
-        let skill_dir = home.join(".agents").join("skills").join("help");
+        let skill_dir = home.join(".codex").join("skills").join("help");
         fs::create_dir_all(&skill_dir).expect("skill dir should exist");
         fs::write(
             skill_dir.join("SKILL.md"),
@@ -5349,10 +5222,10 @@ mod tests {
         ));
         let home = root.join("home");
         let cwd = root.join("cwd");
-        std::fs::create_dir_all(home.join(".claw")).expect("home dir");
-        std::fs::create_dir_all(cwd.join(".claw")).expect("cwd dir");
+        std::fs::create_dir_all(home.join(".codex")).expect("home dir");
+        std::fs::create_dir_all(cwd.join(".codex")).expect("cwd dir");
         std::fs::write(
-            home.join(".claw").join("settings.json"),
+            home.join(".codex").join("settings.json"),
             r#"{"verbose":false}"#,
         )
         .expect("write global settings");
@@ -5415,10 +5288,10 @@ mod tests {
         ));
         let home = root.join("home");
         let cwd = root.join("cwd");
-        std::fs::create_dir_all(home.join(".claw")).expect("home dir");
-        std::fs::create_dir_all(cwd.join(".claw")).expect("cwd dir");
+        std::fs::create_dir_all(home.join(".codex")).expect("home dir");
+        std::fs::create_dir_all(cwd.join(".codex")).expect("cwd dir");
         std::fs::write(
-            cwd.join(".claw").join("settings.local.json"),
+            cwd.join(".codex").join("settings.local.json"),
             r#"{"permissions":{"defaultMode":"acceptEdits"}}"#,
         )
         .expect("write local settings");
@@ -5437,11 +5310,12 @@ mod tests {
         assert_eq!(enter_output["previousLocalMode"], "acceptEdits");
         assert_eq!(enter_output["currentLocalMode"], "plan");
 
-        let local_settings = std::fs::read_to_string(cwd.join(".claw").join("settings.local.json"))
+        let local_settings =
+            std::fs::read_to_string(cwd.join(".codex").join("settings.local.json"))
             .expect("local settings after enter");
         assert!(local_settings.contains(r#""defaultMode": "plan""#));
         let state =
-            std::fs::read_to_string(cwd.join(".claw").join("tool-state").join("plan-mode.json"))
+            std::fs::read_to_string(cwd.join(".codex").join("tool-state").join("plan-mode.json"))
                 .expect("plan mode state");
         assert!(state.contains(r#""hadLocalOverride": true"#));
         assert!(state.contains(r#""previousLocalMode": "acceptEdits""#));
@@ -5453,11 +5327,12 @@ mod tests {
         assert_eq!(exit_output["previousLocalMode"], "acceptEdits");
         assert_eq!(exit_output["currentLocalMode"], "acceptEdits");
 
-        let local_settings = std::fs::read_to_string(cwd.join(".claw").join("settings.local.json"))
+        let local_settings =
+            std::fs::read_to_string(cwd.join(".codex").join("settings.local.json"))
             .expect("local settings after exit");
         assert!(local_settings.contains(r#""defaultMode": "acceptEdits""#));
         assert!(!cwd
-            .join(".claw")
+            .join(".codex")
             .join("tool-state")
             .join("plan-mode.json")
             .exists());
@@ -5488,8 +5363,8 @@ mod tests {
         ));
         let home = root.join("home");
         let cwd = root.join("cwd");
-        std::fs::create_dir_all(home.join(".claw")).expect("home dir");
-        std::fs::create_dir_all(cwd.join(".claw")).expect("cwd dir");
+        std::fs::create_dir_all(home.join(".codex")).expect("home dir");
+        std::fs::create_dir_all(cwd.join(".codex")).expect("cwd dir");
 
         let original_home = std::env::var("HOME").ok();
         let original_config_home = std::env::var("CLAW_CONFIG_HOME").ok();
@@ -5508,7 +5383,8 @@ mod tests {
         assert_eq!(exit_output["changed"], true);
         assert_eq!(exit_output["currentLocalMode"], serde_json::Value::Null);
 
-        let local_settings = std::fs::read_to_string(cwd.join(".claw").join("settings.local.json"))
+        let local_settings =
+            std::fs::read_to_string(cwd.join(".codex").join("settings.local.json"))
             .expect("local settings after exit");
         let local_settings_json: serde_json::Value =
             serde_json::from_str(&local_settings).expect("valid settings json");
@@ -5518,7 +5394,7 @@ mod tests {
             "permissions override should be removed on exit"
         );
         assert!(!cwd
-            .join(".claw")
+            .join(".codex")
             .join("tool-state")
             .join("plan-mode.json")
             .exists());

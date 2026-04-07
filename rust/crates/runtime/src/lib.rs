@@ -16,6 +16,7 @@ mod remote;
 pub mod sandbox;
 mod session;
 mod sse;
+mod surface;
 mod usage;
 
 pub use bash::{execute_bash, BashCommandInput, BashCommandOutput};
@@ -93,6 +94,12 @@ pub use session::{
     SessionFork,
 };
 pub use sse::{IncrementalSseParser, SseEvent};
+pub use surface::{
+    config_paths, credentials_home_dir, default_config_home, discover_definition_roots,
+    instruction_candidates, project_state_dir, sessions_dir, ConfigLayer, ConfigPath,
+    DefinitionRoot, DefinitionSource, CANONICAL_STATE_DIR, CLI_ALIASES, COMPAT_STATE_DIR,
+    LEGACY_STATE_DIR, PRIMARY_CLI_NAME,
+};
 pub use usage::{
     format_usd, pricing_for_model, ModelPricing, TokenUsage, UsageCostEstimate, UsageTracker,
 };

@@ -161,7 +161,7 @@ fn resume_latest_restores_the_most_recent_managed_session() {
     // given
     let temp_dir = unique_temp_dir("resume-latest");
     let project_dir = temp_dir.join("project");
-    let sessions_dir = project_dir.join(".claw").join("sessions");
+    let sessions_dir = project_dir.join(".codex").join("sessions");
     fs::create_dir_all(&sessions_dir).expect("sessions dir should exist");
 
     let older_path = sessions_dir.join("session-older.jsonl");
@@ -208,12 +208,12 @@ fn run_claw(current_dir: &Path, args: &[&str]) -> Output {
 }
 
 fn run_claw_with_env(current_dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_claw"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_sebas"));
     command.current_dir(current_dir).args(args);
     for (key, value) in envs {
         command.env(key, value);
     }
-    command.output().expect("claw should launch")
+    command.output().expect("sebas should launch")
 }
 
 fn unique_temp_dir(label: &str) -> PathBuf {

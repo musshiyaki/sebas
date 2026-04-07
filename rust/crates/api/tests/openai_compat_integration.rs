@@ -135,52 +135,52 @@ async fn stream_message_normalizes_text_and_multiple_tool_calls() {
     assert!(matches!(
         events[1],
         StreamEvent::ContentBlockStart(ContentBlockStartEvent {
-            content_block: OutputContentBlock::Text { .. },
-            ..
+            index: 1,
+            content_block: OutputContentBlock::ToolUse { .. },
         })
     ));
     assert!(matches!(
         events[2],
         StreamEvent::ContentBlockDelta(ContentBlockDeltaEvent {
-            delta: ContentBlockDelta::TextDelta { .. },
-            ..
+            index: 1,
+            delta: ContentBlockDelta::InputJsonDelta { .. },
         })
     ));
     assert!(matches!(
         events[3],
         StreamEvent::ContentBlockStart(ContentBlockStartEvent {
-            index: 1,
+            index: 2,
             content_block: OutputContentBlock::ToolUse { .. },
         })
     ));
     assert!(matches!(
         events[4],
         StreamEvent::ContentBlockDelta(ContentBlockDeltaEvent {
-            index: 1,
+            index: 2,
             delta: ContentBlockDelta::InputJsonDelta { .. },
         })
     ));
     assert!(matches!(
         events[5],
-        StreamEvent::ContentBlockStart(ContentBlockStartEvent {
-            index: 2,
-            content_block: OutputContentBlock::ToolUse { .. },
-        })
-    ));
-    assert!(matches!(
-        events[6],
-        StreamEvent::ContentBlockDelta(ContentBlockDeltaEvent {
-            index: 2,
-            delta: ContentBlockDelta::InputJsonDelta { .. },
-        })
-    ));
-    assert!(matches!(
-        events[7],
         StreamEvent::ContentBlockStop(ContentBlockStopEvent { index: 1 })
     ));
     assert!(matches!(
-        events[8],
+        events[6],
         StreamEvent::ContentBlockStop(ContentBlockStopEvent { index: 2 })
+    ));
+    assert!(matches!(
+        events[7],
+        StreamEvent::ContentBlockStart(ContentBlockStartEvent {
+            index: 0,
+            content_block: OutputContentBlock::Text { .. },
+        })
+    ));
+    assert!(matches!(
+        events[8],
+        StreamEvent::ContentBlockDelta(ContentBlockDeltaEvent {
+            index: 0,
+            delta: ContentBlockDelta::TextDelta { .. },
+        })
     ));
     assert!(matches!(
         events[9],

@@ -5,7 +5,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use plugins::{PluginError, PluginManager, PluginSummary};
-use runtime::{compact_session, CompactionConfig, Session};
+use runtime::{
+    compact_session, default_config_home, discover_definition_roots as surface_definition_roots,
+    CompactionConfig, DefinitionSource, Session, PRIMARY_CLI_NAME,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandManifestEntry {
@@ -912,31 +915,6 @@ pub struct PluginsCommandResult {
     pub reload_runtime: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum DefinitionSource {
-    ProjectClaw,
-    ProjectCodex,
-    ProjectClaude,
-    UserClaw,
-    UserCodexHome,
-    UserCodex,
-    UserClaude,
-}
-
-impl DefinitionSource {
-    fn label(self) -> &'static str {
-        match self {
-            Self::ProjectCodex => "Project (.codex)",
-            Self::ProjectClaw => "Project (.claw)",
-            Self::ProjectClaude => "Project (.claude)",
-            Self::UserCodexHome => "User ($CODEX_HOME)",
-            Self::UserCodex => "User (~/.codex)",
-            Self::UserClaw => "User (~/.claw)",
-            Self::UserClaude => "User (~/.claude)",
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct AgentSummary {
     name: String,
@@ -1191,140 +1169,21 @@ fn resolve_plugin_target(
 }
 
 fn discover_definition_roots(cwd: &Path, leaf: &str) -> Vec<(DefinitionSource, PathBuf)> {
-    let mut roots = Vec::new();
-
-    for ancestor in cwd.ancestors() {
-        push_unique_root(
-            &mut roots,
-            DefinitionSource::ProjectCodex,
-            ancestor.join(".codex").join(leaf),
-        );
-        push_unique_root(
-            &mut roots,
-            DefinitionSource::ProjectClaw,
-            ancestor.join(".claw").join(leaf),
-        );
-        push_unique_root(
-            &mut roots,
-            DefinitionSource::ProjectClaude,
-            ancestor.join(".claude").join(leaf),
-        );
-    }
-
-    if let Ok(codex_home) = env::var("CODEX_HOME") {
-        push_unique_root(
-            &mut roots,
-            DefinitionSource::UserCodexHome,
-            PathBuf::from(codex_home).join(leaf),
-        );
-    }
-
-    if let Some(home) = env::var_os("HOME") {
-        let home = PathBuf::from(home);
-        push_unique_root(
-            &mut roots,
-            DefinitionSource::UserCodex,
-            home.join(".codex").join(leaf),
-        );
-        push_unique_root(
-            &mut roots,
-            DefinitionSource::UserClaw,
-            home.join(".claw").join(leaf),
-        );
-        push_unique_root(
-            &mut roots,
-            DefinitionSource::UserClaude,
-            home.join(".claude").join(leaf),
-        );
-    }
-
-    roots
+    surface_definition_roots(cwd, leaf)
+        .into_iter()
+        .filter(|root| root.path.is_dir())
+        .map(|root| (root.source, root.path))
+        .collect()
 }
 
 fn discover_skill_roots(cwd: &Path) -> Vec<SkillRoot> {
     let mut roots = Vec::new();
 
-    for ancestor in cwd.ancestors() {
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::ProjectCodex,
-            ancestor.join(".codex").join("skills"),
-            SkillOrigin::SkillsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::ProjectClaw,
-            ancestor.join(".claw").join("skills"),
-            SkillOrigin::SkillsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::ProjectClaude,
-            ancestor.join(".claude").join("skills"),
-            SkillOrigin::SkillsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::ProjectCodex,
-            ancestor.join(".codex").join("commands"),
-            SkillOrigin::LegacyCommandsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::ProjectClaude,
-            ancestor.join(".claude").join("commands"),
-            SkillOrigin::LegacyCommandsDir,
-        );
+    for (source, path) in discover_definition_roots(cwd, "skills") {
+        push_unique_skill_root(&mut roots, source, path, SkillOrigin::SkillsDir);
     }
-
-    if let Ok(codex_home) = env::var("CODEX_HOME") {
-        let codex_home = PathBuf::from(codex_home);
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::UserCodexHome,
-            codex_home.join("skills"),
-            SkillOrigin::SkillsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::UserCodexHome,
-            codex_home.join("commands"),
-            SkillOrigin::LegacyCommandsDir,
-        );
-    }
-
-    if let Some(home) = env::var_os("HOME") {
-        let home = PathBuf::from(home);
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::UserCodex,
-            home.join(".codex").join("skills"),
-            SkillOrigin::SkillsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::UserClaw,
-            home.join(".claw").join("skills"),
-            SkillOrigin::SkillsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::UserCodex,
-            home.join(".codex").join("commands"),
-            SkillOrigin::LegacyCommandsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::UserClaude,
-            home.join(".claude").join("skills"),
-            SkillOrigin::SkillsDir,
-        );
-        push_unique_skill_root(
-            &mut roots,
-            DefinitionSource::UserClaude,
-            home.join(".claude").join("commands"),
-            SkillOrigin::LegacyCommandsDir,
-        );
+    for (source, path) in discover_definition_roots(cwd, "commands") {
+        push_unique_skill_root(&mut roots, source, path, SkillOrigin::LegacyCommandsDir);
     }
 
     roots
@@ -1382,21 +1241,11 @@ fn install_skill_into(
 
 fn default_skill_install_root() -> std::io::Result<PathBuf> {
     if let Ok(config_home) = env::var("SEBAS_CONFIG_HOME")
-        .or_else(|_| env::var("CODEX_HOME"))
         .or_else(|_| env::var("CLAW_CONFIG_HOME"))
     {
         return Ok(PathBuf::from(config_home).join("skills"));
     }
-    if let Ok(codex_home) = env::var("CODEX_HOME") {
-        return Ok(PathBuf::from(codex_home).join("skills"));
-    }
-    if let Some(home) = env::var_os("HOME") {
-        return Ok(PathBuf::from(home).join(".codex").join("skills"));
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        "unable to resolve a skills install root; set CODEX_HOME or HOME",
-    ))
+    Ok(default_config_home().join("skills"))
 }
 
 fn resolve_skill_install_source(source: &str, cwd: &Path) -> std::io::Result<SkillInstallSource> {
@@ -1529,16 +1378,6 @@ impl SkillInstallSource {
             Self::Directory { root, .. } => root,
             Self::MarkdownFile { path } => path,
         }
-    }
-}
-
-fn push_unique_root(
-    roots: &mut Vec<(DefinitionSource, PathBuf)>,
-    source: DefinitionSource,
-    path: PathBuf,
-) {
-    if path.is_dir() && !roots.iter().any(|(_, existing)| existing == &path) {
-        roots.push((source, path));
     }
 }
 
@@ -1888,7 +1727,7 @@ fn render_agents_usage(unexpected: Option<&str>) -> String {
     let mut lines = vec![
         "Agents".to_string(),
         "  Usage            /agents [list|help]".to_string(),
-        "  Direct CLI       codex agents".to_string(),
+        format!("  Direct CLI       {PRIMARY_CLI_NAME} agents"),
         "  Sources          .codex/agents, .claw/agents, .claude/agents, $CODEX_HOME/agents".to_string(),
     ];
     if let Some(args) = unexpected {
@@ -1901,7 +1740,9 @@ fn render_skills_usage(unexpected: Option<&str>) -> String {
     let mut lines = vec![
         "Skills".to_string(),
         "  Usage            /skills [list|install <path>|help]".to_string(),
-        "  Direct CLI       codex skills [list|install <path>|help]".to_string(),
+        format!(
+            "  Direct CLI       {PRIMARY_CLI_NAME} skills [list|install <path>|help]"
+        ),
         "  Install root     $CODEX_HOME/skills or ~/.codex/skills".to_string(),
         "  Sources          .codex/skills, .claw/skills, .claude/skills, legacy /commands".to_string(),
     ];
@@ -2682,7 +2523,7 @@ mod tests {
         let agents_help =
             super::handle_agents_slash_command(Some("help"), &cwd).expect("agents help");
         assert!(agents_help.contains("Usage            /agents [list|help]"));
-        assert!(agents_help.contains("Direct CLI       claw agents"));
+        assert!(agents_help.contains("Direct CLI       sebas agents"));
 
         let agents_unexpected =
             super::handle_agents_slash_command(Some("show planner"), &cwd).expect("agents usage");

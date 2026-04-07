@@ -8,6 +8,7 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::config::OAuthConfig;
+use crate::surface;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OAuthTokenSet {
@@ -324,12 +325,13 @@ fn generate_random_token(bytes: usize) -> io::Result<String> {
 }
 
 fn credentials_home_dir() -> io::Result<PathBuf> {
+    if let Some(path) = std::env::var_os("SEBAS_CONFIG_HOME") {
+        return Ok(PathBuf::from(path));
+    }
     if let Some(path) = std::env::var_os("CLAW_CONFIG_HOME") {
         return Ok(PathBuf::from(path));
     }
-    let home = std::env::var_os("HOME")
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
-    Ok(PathBuf::from(home).join(".claw"))
+    surface::credentials_home_dir()
 }
 
 fn read_credentials_root(path: &PathBuf) -> io::Result<Map<String, Value>> {

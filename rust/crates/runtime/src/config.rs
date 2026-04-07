@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::json::JsonValue;
 use crate::sandbox::{FilesystemIsolationMode, SandboxConfig};
+use crate::surface::{self, ConfigLayer};
 
 pub const CLAW_SETTINGS_SCHEMA_NAME: &str = "SettingsSchema";
 
@@ -205,58 +206,17 @@ impl ConfigLoader {
 
     #[must_use]
     pub fn discover(&self) -> Vec<ConfigEntry> {
-        let user_legacy_path = self.config_home.parent().map_or_else(
-            || PathBuf::from(".claw.json"),
-            |parent| parent.join(".claw.json"),
-        );
-        vec![
-            ConfigEntry {
-                source: ConfigSource::User,
-                path: self.config_home.parent().map_or_else(
-                    || PathBuf::from(".codex").join("settings.json"),
-                    |parent| parent.join(".codex").join("settings.json"),
-                ),
-            },
-            ConfigEntry {
-                source: ConfigSource::User,
-                path: self.config_home.parent().map_or_else(
-                    || PathBuf::from(".claude").join("settings.json"),
-                    |parent| parent.join(".claude").join("settings.json"),
-                ),
-            },
-            ConfigEntry {
-                source: ConfigSource::User,
-                path: user_legacy_path,
-            },
-            ConfigEntry {
-                source: ConfigSource::User,
-                path: self.config_home.join("settings.json"),
-            },
-            ConfigEntry {
-                source: ConfigSource::Project,
-                path: self.cwd.join(".codex").join("settings.json"),
-            },
-            ConfigEntry {
-                source: ConfigSource::Project,
-                path: self.cwd.join(".claude").join("settings.json"),
-            },
-            ConfigEntry {
-                source: ConfigSource::Project,
-                path: self.cwd.join(".claw.json"),
-            },
-            ConfigEntry {
-                source: ConfigSource::Project,
-                path: self.cwd.join(".claw").join("settings.json"),
-            },
-            ConfigEntry {
-                source: ConfigSource::Local,
-                path: self.cwd.join(".codex").join("settings.local.json"),
-            },
-            ConfigEntry {
-                source: ConfigSource::Local,
-                path: self.cwd.join(".claw").join("settings.local.json"),
-            },
-        ]
+        surface::config_paths(&self.cwd, &self.config_home)
+            .into_iter()
+            .map(|entry| ConfigEntry {
+                source: match entry.layer {
+                    ConfigLayer::User => ConfigSource::User,
+                    ConfigLayer::Project => ConfigSource::Project,
+                    ConfigLayer::Local => ConfigSource::Local,
+                },
+                path: entry.path,
+            })
+            .collect()
     }
 
     pub fn load(&self) -> Result<RuntimeConfig, ConfigError> {
@@ -468,11 +428,9 @@ impl RuntimePluginConfig {
 #[must_use]
 pub fn default_config_home() -> PathBuf {
     std::env::var_os("SEBAS_CONFIG_HOME")
-        .or_else(|| std::env::var_os("CODEX_HOME"))
         .or_else(|| std::env::var_os("CLAW_CONFIG_HOME"))
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".codex")))
-        .unwrap_or_else(|| PathBuf::from(".codex"))
+        .unwrap_or_else(surface::default_config_home)
 }
 
 impl RuntimeHookConfig {
@@ -1192,6 +1150,56 @@ mod tests {
         assert_eq!(loaded.permission_rules().ask(), &["Edit".to_string()]);
         assert!(loaded.mcp().get("home").is_some());
         assert!(loaded.mcp().get("project").is_some());
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn codex_paths_override_legacy_claw_and_claude_paths() {
+        let root = temp_dir();
+        let cwd = root.join("project");
+        let home = root.join("home").join(".codex");
+        fs::create_dir_all(cwd.join(".codex")).expect("project codex dir");
+        fs::create_dir_all(cwd.join(".claw")).expect("project claw dir");
+        fs::create_dir_all(cwd.join(".claude")).expect("project claude dir");
+        fs::create_dir_all(&home).expect("home codex dir");
+
+        fs::write(home.join("settings.json"), r#"{"model":"user-codex"}"#)
+            .expect("write user codex settings");
+        fs::write(cwd.join(".claw.json"), r#"{"model":"project-claw-json"}"#)
+            .expect("write project claw compat");
+        fs::write(
+            cwd.join(".claw").join("settings.json"),
+            r#"{"model":"project-claw"}"#,
+        )
+        .expect("write project claw settings");
+        fs::write(
+            cwd.join(".claude").join("settings.json"),
+            r#"{"model":"project-claude"}"#,
+        )
+        .expect("write project claude settings");
+        fs::write(
+            cwd.join(".codex").join("settings.json"),
+            r#"{"model":"project-codex"}"#,
+        )
+        .expect("write project codex settings");
+        fs::write(
+            cwd.join(".codex").join("settings.local.json"),
+            r#"{"model":"local-codex"}"#,
+        )
+        .expect("write local codex settings");
+
+        let loaded = ConfigLoader::new(&cwd, &home)
+            .load()
+            .expect("config should load");
+
+        assert_eq!(loaded.model(), Some("local-codex"));
+        assert_eq!(loaded.loaded_entries().len(), 6);
+        assert_eq!(
+            loaded.loaded_entries()[0].path,
+            home.join("settings.json"),
+            "user codex settings should be loaded first"
+        );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }

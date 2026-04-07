@@ -15,7 +15,7 @@ fn status_command_applies_model_and_permission_mode_flags() {
     fs::create_dir_all(&temp_dir).expect("temp dir should exist");
 
     // when
-    let output = Command::new(env!("CARGO_BIN_EXE_claw"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sebas"))
         .current_dir(&temp_dir)
         .args([
             "--model",
@@ -25,7 +25,7 @@ fn status_command_applies_model_and_permission_mode_flags() {
             "status",
         ])
         .output()
-        .expect("claw should launch");
+        .expect("sebas should launch");
 
     // then
     assert_success(&output);
@@ -45,7 +45,7 @@ fn resume_flag_loads_a_saved_session_and_dispatches_status() {
     let session_path = write_session(&temp_dir, "resume-status");
 
     // when
-    let output = Command::new(env!("CARGO_BIN_EXE_claw"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sebas"))
         .current_dir(&temp_dir)
         .args([
             "--resume",
@@ -53,7 +53,7 @@ fn resume_flag_loads_a_saved_session_and_dispatches_status() {
             "/status",
         ])
         .output()
-        .expect("claw should launch");
+        .expect("sebas should launch");
 
     // then
     assert_success(&output);
@@ -73,16 +73,16 @@ fn slash_command_names_match_known_commands_and_suggest_nearby_unknown_ones() {
     fs::create_dir_all(&temp_dir).expect("temp dir should exist");
 
     // when
-    let help_output = Command::new(env!("CARGO_BIN_EXE_claw"))
+    let help_output = Command::new(env!("CARGO_BIN_EXE_sebas"))
         .current_dir(&temp_dir)
         .arg("/help")
         .output()
-        .expect("claw should launch");
-    let unknown_output = Command::new(env!("CARGO_BIN_EXE_claw"))
+        .expect("sebas should launch");
+    let unknown_output = Command::new(env!("CARGO_BIN_EXE_sebas"))
         .current_dir(&temp_dir)
         .arg("/stats")
         .output()
-        .expect("claw should launch");
+        .expect("sebas should launch");
 
     // then
     assert_success(&help_output);
@@ -97,7 +97,9 @@ fn slash_command_names_match_known_commands_and_suggest_nearby_unknown_ones() {
         String::from_utf8_lossy(&unknown_output.stderr)
     );
     let stderr = String::from_utf8(unknown_output.stderr).expect("stderr should be utf8");
-    assert!(stderr.contains("unknown slash command outside the REPL: /stats"));
+    assert!(stderr.contains(
+        "unknown slash command outside the interactive agent: /stats"
+    ));
     assert!(stderr.contains("Did you mean"));
     assert!(stderr.contains("/status"));
 
@@ -133,7 +135,7 @@ fn config_command_loads_defaults_from_standard_config_locations() {
             "model",
         ])
         .output()
-        .expect("claw should launch");
+        .expect("sebas should launch");
 
     // then
     assert_success(&output);
@@ -161,9 +163,27 @@ fn config_command_loads_defaults_from_standard_config_locations() {
 }
 
 fn command_in(cwd: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_claw"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_sebas"));
     command.current_dir(cwd);
     command
+}
+
+#[test]
+fn codex_binary_remains_a_compatible_alias() {
+    let temp_dir = unique_temp_dir("codex-alias");
+    fs::create_dir_all(&temp_dir).expect("temp dir should exist");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_codex"))
+        .current_dir(&temp_dir)
+        .arg("status")
+        .output()
+        .expect("codex alias should launch");
+
+    assert_success(&output);
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Status"));
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
 }
 
 fn write_session(root: &Path, label: &str) -> PathBuf {

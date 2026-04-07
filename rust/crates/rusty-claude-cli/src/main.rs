@@ -6,8 +6,10 @@
     clippy::unnecessary_wraps,
     clippy::unused_self
 )]
+mod cli_help;
 mod init;
 mod input;
+mod managed_sessions;
 mod render;
 mod sebas_engine;
 
@@ -25,7 +27,8 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use api::{
-    detect_provider_kind, resolve_startup_auth_source, AnthropicClient, AuthSource,
+    detect_provider_kind, max_tokens_for_model, resolve_startup_auth_source, AnthropicClient,
+    AuthSource,
     ContentBlockDelta, InputContentBlock, InputMessage, MessageRequest, MessageResponse,
     OutputContentBlock, PromptCache, ProviderClient, ProviderKind,
     StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition, ToolResultContentBlock,
@@ -59,16 +62,17 @@ use crate::sebas_engine::{
     ensure_engine_ready, load_runtime, print_engine_doctor, print_engine_status, run_bench,
     EngineKind, EngineRuntime,
 };
+use managed_sessions::{
+    create_managed_session_handle, format_session_modified_age, latest_managed_session,
+    list_managed_sessions, render_session_list, resolve_session_reference,
+    ManagedSessionSummary, SessionHandle, LEGACY_SESSION_EXTENSION, LATEST_SESSION_REFERENCE,
+    PRIMARY_SESSION_EXTENSION,
+    SESSION_REFERENCE_ALIASES,
+};
+use runtime::PRIMARY_CLI_NAME;
 
 const DEFAULT_MODEL: &str = "qwen35b";
-const PRIMARY_BINARY_NAME: &str = "codex";
-fn max_tokens_for_model(model: &str) -> u32 {
-    if model.contains("opus") {
-        32_000
-    } else {
-        64_000
-    }
-}
+const PRIMARY_BINARY_NAME: &str = PRIMARY_CLI_NAME;
 const DEFAULT_DATE: &str = "2026-03-31";
 const DEFAULT_OAUTH_CALLBACK_PORT: u16 = 4545;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -76,10 +80,6 @@ const BUILD_TARGET: Option<&str> = option_env!("TARGET");
 const GIT_SHA: Option<&str> = option_env!("GIT_SHA");
 const INTERNAL_PROGRESS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3);
 const DEFAULT_MAX_TOOL_ITERATIONS: usize = 12;
-const PRIMARY_SESSION_EXTENSION: &str = "jsonl";
-const LEGACY_SESSION_EXTENSION: &str = "json";
-const LATEST_SESSION_REFERENCE: &str = "latest";
-const SESSION_REFERENCE_ALIASES: &[&str] = &[LATEST_SESSION_REFERENCE, "last", "recent"];
 const CLI_OPTION_SUGGESTIONS: &[&str] = &[
     "--help",
     "-h",
@@ -507,7 +507,9 @@ fn try_handle_sebas_direct_commands(
         "engine" => {
             let Some(action) = args.get(1).map(String::as_str) else {
                 return Err(std::io::Error::other(
-                    "usage: codex engine <start|doctor|status|bench> --engine <qwen35b|qwen122b>",
+                    format!(
+                        "usage: {PRIMARY_BINARY_NAME} engine <start|doctor|status|bench> --engine <qwen35b|qwen122b>"
+                    ),
                 )
                 .into());
             };
@@ -806,11 +808,11 @@ fn bare_slash_command_guidance(command_name: &str) -> Option<String> {
         .find(|spec| spec.name == command_name)?;
     let guidance = if slash_command.resume_supported {
         format!(
-            "`codex {command_name}` is a slash command. Use `codex --resume SESSION.jsonl /{command_name}` or start `codex` and run `/{command_name}`."
+            "`{PRIMARY_BINARY_NAME} {command_name}` is a slash command. Use `{PRIMARY_BINARY_NAME} --resume SESSION.jsonl /{command_name}` or start `{PRIMARY_BINARY_NAME}` and run `/{command_name}`."
         )
     } else {
         format!(
-            "`codex {command_name}` is a slash command. Start `codex` and run `/{command_name}` inside the REPL."
+            "`{PRIMARY_BINARY_NAME} {command_name}` is a slash command. Start `{PRIMARY_BINARY_NAME}` and run `/{command_name}` inside the interactive agent."
         )
     };
     Some(guidance)
@@ -832,7 +834,7 @@ fn parse_direct_slash_cli_action(rest: &[String]) -> Result<CliAction, String> {
         Ok(Some(command)) => Err({
             let _ = command;
             format!(
-                "slash command {command_name} is interactive-only. Start `codex` and run it there, or use `codex --resume SESSION.jsonl {command_name}` / `codex --resume {latest} {command_name}` when the command is marked [resume] in /help.",
+                "slash command {command_name} is interactive-only. Start `{PRIMARY_BINARY_NAME}` and run it there, or use `{PRIMARY_BINARY_NAME} --resume SESSION.jsonl {command_name}` / `{PRIMARY_BINARY_NAME} --resume {latest} {command_name}` when the command is marked [resume] in /help.",
                 command_name = rest[0],
                 latest = LATEST_SESSION_REFERENCE,
             )
@@ -849,18 +851,20 @@ fn format_unknown_option(option: &str) -> String {
         message.push_str(suggestion);
         message.push('?');
     }
-    message.push_str("\nRun `codex --help` for usage.");
+    message.push_str(&format!("\nRun `{PRIMARY_BINARY_NAME} --help` for usage."));
     message
 }
 
 fn format_unknown_direct_slash_command(name: &str) -> String {
-    let mut message = format!("unknown slash command outside the REPL: /{name}");
+    let mut message = format!("unknown slash command outside the interactive agent: /{name}");
     if let Some(suggestions) = render_suggestion_line("Did you mean", &suggest_slash_commands(name))
     {
         message.push('\n');
         message.push_str(&suggestions);
     }
-    message.push_str("\nRun `codex --help` for CLI usage, or start `codex` and use /help.");
+    message.push_str(&format!(
+        "\nRun `{PRIMARY_BINARY_NAME} --help` for CLI usage, or start `{PRIMARY_BINARY_NAME}` and use /help."
+    ));
     message
 }
 
@@ -1007,7 +1011,9 @@ fn default_permission_mode() -> PermissionMode {
 fn handle_search_command(args: &[String]) -> Result<String, Box<dyn std::error::Error>> {
     let query = args.join(" ").trim().to_string();
     if query.is_empty() {
-        return Err(std::io::Error::other("usage: codex search <query>").into());
+        return Err(
+            std::io::Error::other(format!("usage: {PRIMARY_BINARY_NAME} search <query>")).into(),
+        );
     }
     Ok(execute_tool("WebSearch", &json!({ "query": query })).map_err(std::io::Error::other)?)
 }
@@ -1015,11 +1021,14 @@ fn handle_search_command(args: &[String]) -> Result<String, Box<dyn std::error::
 fn handle_model_command(args: &[String]) -> Result<String, Box<dyn std::error::Error>> {
     match args {
         [] => Ok(format!(
-            "Model\n  Default           {}\n  Usage             codex model set <qwen35b|qwen122b>",
+            "Model\n  Default           {}\n  Usage             {PRIMARY_BINARY_NAME} model set <qwen35b|qwen122b>",
             resolve_model_alias(DEFAULT_MODEL)
         )),
         [action, value] if action == "set" => set_project_default_model(value),
-        _ => Err(std::io::Error::other("usage: codex model set <qwen35b|qwen122b>").into()),
+        _ => Err(std::io::Error::other(format!(
+            "usage: {PRIMARY_BINARY_NAME} model set <qwen35b|qwen122b>"
+        ))
+        .into()),
     }
 }
 
@@ -1940,22 +1949,6 @@ fn run_repl(
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-struct SessionHandle {
-    id: String,
-    path: PathBuf,
-}
-
-#[derive(Debug, Clone)]
-struct ManagedSessionSummary {
-    id: String,
-    path: PathBuf,
-    modified_epoch_millis: u128,
-    message_count: usize,
-    parent_session_id: Option<String>,
-    branch_name: Option<String>,
-}
-
 struct LiveCli {
     model: String,
     allowed_tools: Option<AllowedToolSet>,
@@ -2207,7 +2200,7 @@ impl LiveCli {
         let mut spinner = Spinner::new();
         let mut stdout = io::stdout();
         spinner.tick(
-            "🦀 Thinking...",
+            "🛠️ Working...",
             TerminalRenderer::new().color_theme(),
             &mut stdout,
         )?;
@@ -2873,230 +2866,8 @@ impl LiveCli {
     }
 }
 
-fn sessions_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let cwd = env::current_dir()?;
-    let path = cwd.join(".codex").join("sessions");
-    fs::create_dir_all(&path)?;
-    Ok(path)
-}
-
-fn create_managed_session_handle(
-    session_id: &str,
-) -> Result<SessionHandle, Box<dyn std::error::Error>> {
-    let id = session_id.to_string();
-    let path = sessions_dir()?.join(format!("{id}.{PRIMARY_SESSION_EXTENSION}"));
-    Ok(SessionHandle { id, path })
-}
-
-fn resolve_session_reference(reference: &str) -> Result<SessionHandle, Box<dyn std::error::Error>> {
-    if SESSION_REFERENCE_ALIASES
-        .iter()
-        .any(|alias| reference.eq_ignore_ascii_case(alias))
-    {
-        let latest = latest_managed_session()?;
-        return Ok(SessionHandle {
-            id: latest.id,
-            path: latest.path,
-        });
-    }
-
-    let direct = PathBuf::from(reference);
-    let looks_like_path = direct.extension().is_some() || direct.components().count() > 1;
-    let path = if direct.exists() {
-        direct
-    } else if looks_like_path {
-        return Err(format_missing_session_reference(reference).into());
-    } else {
-        resolve_managed_session_path(reference)?
-    };
-    let id = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .and_then(|name| {
-            name.strip_suffix(&format!(".{PRIMARY_SESSION_EXTENSION}"))
-                .or_else(|| name.strip_suffix(&format!(".{LEGACY_SESSION_EXTENSION}")))
-        })
-        .unwrap_or(reference)
-        .to_string();
-    Ok(SessionHandle { id, path })
-}
-
-fn resolve_managed_session_path(session_id: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let directory = sessions_dir()?;
-    for extension in [PRIMARY_SESSION_EXTENSION, LEGACY_SESSION_EXTENSION] {
-        let path = directory.join(format!("{session_id}.{extension}"));
-        if path.exists() {
-            return Ok(path);
-        }
-    }
-    Err(format_missing_session_reference(session_id).into())
-}
-
-fn is_managed_session_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|extension| {
-            extension == PRIMARY_SESSION_EXTENSION || extension == LEGACY_SESSION_EXTENSION
-        })
-}
-
-fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::error::Error>> {
-    let mut sessions = Vec::new();
-    for entry in fs::read_dir(sessions_dir()?)? {
-        let entry = entry?;
-        let path = entry.path();
-        if !is_managed_session_file(&path) {
-            continue;
-        }
-        let metadata = entry.metadata()?;
-        let modified_epoch_millis = metadata
-            .modified()
-            .ok()
-            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-            .map(|duration| duration.as_millis())
-            .unwrap_or_default();
-        let (id, message_count, parent_session_id, branch_name) =
-            match Session::load_from_path(&path) {
-                Ok(session) => {
-                    let parent_session_id = session
-                        .fork
-                        .as_ref()
-                        .map(|fork| fork.parent_session_id.clone());
-                    let branch_name = session
-                        .fork
-                        .as_ref()
-                        .and_then(|fork| fork.branch_name.clone());
-                    (
-                        session.session_id,
-                        session.messages.len(),
-                        parent_session_id,
-                        branch_name,
-                    )
-                }
-                Err(_) => (
-                    path.file_stem()
-                        .and_then(|value| value.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    0,
-                    None,
-                    None,
-                ),
-            };
-        sessions.push(ManagedSessionSummary {
-            id,
-            path,
-            modified_epoch_millis,
-            message_count,
-            parent_session_id,
-            branch_name,
-        });
-    }
-    sessions.sort_by(|left, right| {
-        right
-            .modified_epoch_millis
-            .cmp(&left.modified_epoch_millis)
-            .then_with(|| right.id.cmp(&left.id))
-    });
-    Ok(sessions)
-}
-
-fn latest_managed_session() -> Result<ManagedSessionSummary, Box<dyn std::error::Error>> {
-    list_managed_sessions()?
-        .into_iter()
-        .next()
-        .ok_or_else(|| format_no_managed_sessions().into())
-}
-
-fn format_missing_session_reference(reference: &str) -> String {
-    format!(
-        "session not found: {reference}\nHint: managed sessions live in .codex/sessions/. Try `{LATEST_SESSION_REFERENCE}` for the most recent session or `/session list` in the REPL."
-    )
-}
-
-fn format_no_managed_sessions() -> String {
-    format!(
-        "no managed sessions found in .codex/sessions/\nStart `{}` to create a session, then rerun with `--resume {LATEST_SESSION_REFERENCE}`.",
-        PRIMARY_BINARY_NAME
-    )
-}
-
-fn render_session_list(active_session_id: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let sessions = list_managed_sessions()?;
-    let mut lines = vec![
-        "Sessions".to_string(),
-        format!("  Directory         {}", sessions_dir()?.display()),
-    ];
-    if sessions.is_empty() {
-        lines.push("  No managed sessions saved yet.".to_string());
-        return Ok(lines.join("\n"));
-    }
-    for session in sessions {
-        let marker = if session.id == active_session_id {
-            "● current"
-        } else {
-            "○ saved"
-        };
-        let lineage = match (
-            session.branch_name.as_deref(),
-            session.parent_session_id.as_deref(),
-        ) {
-            (Some(branch_name), Some(parent_session_id)) => {
-                format!(" branch={branch_name} from={parent_session_id}")
-            }
-            (None, Some(parent_session_id)) => format!(" from={parent_session_id}"),
-            (Some(branch_name), None) => format!(" branch={branch_name}"),
-            (None, None) => String::new(),
-        };
-        lines.push(format!(
-            "  {id:<20} {marker:<10} msgs={msgs:<4} modified={modified}{lineage} path={path}",
-            id = session.id,
-            msgs = session.message_count,
-            modified = format_session_modified_age(session.modified_epoch_millis),
-            lineage = lineage,
-            path = session.path.display(),
-        ));
-    }
-    Ok(lines.join("\n"))
-}
-
-fn format_session_modified_age(modified_epoch_millis: u128) -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map_or(modified_epoch_millis, |duration| duration.as_millis());
-    let delta_seconds = now
-        .saturating_sub(modified_epoch_millis)
-        .checked_div(1_000)
-        .unwrap_or_default();
-    match delta_seconds {
-        0..=4 => "just-now".to_string(),
-        5..=59 => format!("{delta_seconds}s-ago"),
-        60..=3_599 => format!("{}m-ago", delta_seconds / 60),
-        3_600..=86_399 => format!("{}h-ago", delta_seconds / 3_600),
-        _ => format!("{}d-ago", delta_seconds / 86_400),
-    }
-}
-
 fn render_repl_help() -> String {
-    [
-        "REPL".to_string(),
-        "  /exit                Quit the REPL".to_string(),
-        "  /quit                Quit the REPL".to_string(),
-        "  Up/Down              Navigate prompt history".to_string(),
-        "  Tab                  Complete commands, modes, and recent sessions".to_string(),
-        "  Ctrl-C               Clear input (or exit on empty prompt)".to_string(),
-        "  Shift+Enter/Ctrl+J   Insert a newline".to_string(),
-        "  Auto-save            .codex/sessions/<session-id>.jsonl".to_string(),
-        "  Resume latest        /resume latest".to_string(),
-        "  Browse sessions      /session list".to_string(),
-        String::new(),
-        render_slash_command_help(),
-    ]
-    .join(
-        "
-",
-    )
+    cli_help::render_repl_help(&render_slash_command_help(), PRIMARY_SESSION_EXTENSION)
 }
 
 fn print_status_snapshot(
@@ -3346,7 +3117,7 @@ fn render_config_report(section: Option<&str>) -> Result<String, Box<dyn std::er
             "sebas" | "codex" => runtime_config.get("sebas"),
             other => {
                 lines.push(format!(
-                    "  Unsupported config section '{other}'. Use env, hooks, model, mcp, plugins, or codex."
+                    "  Unsupported config section '{other}'. Use env, hooks, model, mcp, plugins, or sebas."
                 ));
                 return Ok(lines.join(
                     "
@@ -3432,7 +3203,7 @@ fn render_session_cli_report(action: Option<&str>) -> Result<String, Box<dyn std
             ))
         }
         Some(other) => Err(std::io::Error::other(format!(
-            "unknown session command: {other}. Use `codex session list` or `codex session latest`."
+            "unknown session command: {other}. Use `{PRIMARY_BINARY_NAME} session list` or `{PRIMARY_BINARY_NAME} session latest`."
         ))
         .into()),
     }
@@ -5581,7 +5352,7 @@ impl ToolExecutor for CliToolExecutor {
                 let error = if tool_name == "WebSearch" {
                     format!(
                         "WebSearch failed. Do not retry the same WebSearch query in this turn. \
-Summarize the failure briefly, then ask the user to narrow the query or run `codex search` directly.\n\nOriginal error: {error}"
+Summarize the failure briefly, then ask the user to narrow the query or run `{PRIMARY_BINARY_NAME} search` directly.\n\nOriginal error: {error}"
                     )
                 } else {
                     error
@@ -5654,88 +5425,6 @@ fn convert_messages(messages: &[ConversationMessage]) -> Vec<InputMessage> {
 
 #[allow(clippy::too_many_lines)]
 fn print_help_to(out: &mut impl Write) -> io::Result<()> {
-    writeln!(out, "{PRIMARY_BINARY_NAME} v{VERSION}")?;
-    writeln!(out)?;
-    writeln!(out, "Usage:")?;
-    writeln!(
-        out,
-        "  codex chat --model <qwen35b|qwen122b> [--allowedTools TOOL[,TOOL...]]"
-    )?;
-    writeln!(out, "      Start the interactive REPL against a local engine")?;
-    writeln!(
-        out,
-        "  codex prompt [--model <qwen35b|qwen122b>] [--output-format text|json] TEXT"
-    )?;
-    writeln!(out, "      Send one prompt and exit")?;
-    writeln!(
-        out,
-        "  codex engine <start|doctor|status|bench> --engine <qwen35b|qwen122b>"
-    )?;
-    writeln!(out, "      Manage local OpenAI-compatible inference engines")?;
-    writeln!(
-        out,
-        "  codex config [env|hooks|model|mcp|plugins|codex|import-qwen]"
-    )?;
-    writeln!(out, "      Inspect or migrate Codex configuration")?;
-    writeln!(out, "  codex search <query>")?;
-    writeln!(out, "      Run built-in web search immediately")?;
-    writeln!(out, "  codex model set <qwen35b|qwen122b>")?;
-    writeln!(out, "      Persist the project default model")?;
-    writeln!(out, "  codex session [list|latest]")?;
-    writeln!(out, "      Inspect saved local sessions")?;
-    writeln!(out, "  codex mcp")?;
-    writeln!(out, "      List configured MCP servers")?;
-    writeln!(out, "  codex --resume [SESSION.jsonl|session-id|latest] [/status] [/compact] [...]")?;
-    writeln!(
-        out,
-        "      Inspect or maintain a saved session without entering the REPL"
-    )?;
-    writeln!(out, "  codex help")?;
-    writeln!(out, "      Alias for --help")?;
-    writeln!(out, "  codex version")?;
-    writeln!(out, "      Alias for --version")?;
-    writeln!(out, "  codex status")?;
-    writeln!(
-        out,
-        "      Show the current local workspace status snapshot"
-    )?;
-    writeln!(out, "  codex sandbox")?;
-    writeln!(out, "      Show the current sandbox isolation snapshot")?;
-    writeln!(out, "  codex dump-manifests")?;
-    writeln!(out, "  codex bootstrap-plan")?;
-    writeln!(out, "  codex agents")?;
-    writeln!(out, "  codex skills")?;
-    writeln!(out, "  codex system-prompt [--cwd PATH] [--date YYYY-MM-DD]")?;
-    writeln!(out, "  codex login")?;
-    writeln!(out, "  codex logout")?;
-    writeln!(out, "  codex init")?;
-    writeln!(out)?;
-    writeln!(out, "Flags:")?;
-    writeln!(
-        out,
-        "  --model MODEL              Override the active model"
-    )?;
-    writeln!(
-        out,
-        "  --output-format FORMAT     Non-interactive output format: text or json"
-    )?;
-    writeln!(
-        out,
-        "  --permission-mode MODE     Set read-only, workspace-write, or danger-full-access"
-    )?;
-    writeln!(
-        out,
-        "  --dangerously-skip-permissions  Skip all permission checks"
-    )?;
-    writeln!(out, "  --allowedTools TOOLS       Restrict enabled tools (repeatable; comma-separated aliases supported)")?;
-    writeln!(
-        out,
-        "  --version, -V              Print version and build information locally"
-    )?;
-    writeln!(out)?;
-    writeln!(out, "Interactive slash commands:")?;
-    writeln!(out, "{}", render_slash_command_help())?;
-    writeln!(out)?;
     let resume_commands = resume_supported_slash_commands()
         .into_iter()
         .map(|spec| match spec.argument_hint {
@@ -5744,44 +5433,15 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    writeln!(out, "Resume-safe commands: {resume_commands}")?;
-    writeln!(out)?;
-    writeln!(out, "Session shortcuts:")?;
-    writeln!(
+    cli_help::print_help_to(
         out,
-        "  REPL turns auto-save to .codex/sessions/<session-id>.{PRIMARY_SESSION_EXTENSION}"
-    )?;
-    writeln!(
-        out,
-        "  Use `{LATEST_SESSION_REFERENCE}` with --resume, /resume, or /session switch to target the newest saved session"
-    )?;
-    writeln!(
-        out,
-        "  Use /session list in the REPL to browse managed sessions"
-    )?;
-    writeln!(out, "Examples:")?;
-    writeln!(out, "  codex chat --model qwen35b")?;
-    writeln!(
-        out,
-        "  codex prompt --model qwen122b --output-format json \"explain src/main.rs\""
-    )?;
-    writeln!(
-        out,
-        "  codex engine doctor --engine qwen35b"
-    )?;
-    writeln!(out, "  codex search \"today's japan headlines\"")?;
-    writeln!(out, "  codex model set qwen35b")?;
-    writeln!(out, "  codex config import-qwen")?;
-    writeln!(out, "  codex --resume {LATEST_SESSION_REFERENCE}")?;
-    writeln!(
-        out,
-        "  codex --resume {LATEST_SESSION_REFERENCE} /status /diff /export notes.txt"
-    )?;
-    writeln!(out, "  codex agents")?;
-    writeln!(out, "  codex /skills")?;
-    writeln!(out, "  codex login")?;
-    writeln!(out, "  codex init")?;
-    Ok(())
+        PRIMARY_BINARY_NAME,
+        VERSION,
+        PRIMARY_SESSION_EXTENSION,
+        LATEST_SESSION_REFERENCE,
+        &render_slash_command_help(),
+        &resume_commands,
+    )
 }
 
 fn print_help() {
@@ -6186,7 +5846,7 @@ mod tests {
         let error = parse_args(&["/status".to_string()])
             .expect_err("/status should remain REPL-only when invoked directly");
         assert!(error.contains("interactive-only"));
-        assert!(error.contains("claw --resume SESSION.jsonl /status"));
+        assert!(error.contains("sebas --resume SESSION.jsonl /status"));
     }
 
     #[test]
@@ -6276,7 +5936,7 @@ mod tests {
         let error = parse_args(&["--resum".to_string()]).expect_err("unknown option should fail");
         assert!(error.contains("unknown option: --resum"));
         assert!(error.contains("Did you mean --resume?"));
-        assert!(error.contains("claw --help"));
+        assert!(error.contains("sebas --help"));
     }
 
     #[test]
@@ -6367,7 +6027,7 @@ mod tests {
     #[test]
     fn repl_help_includes_shared_commands_and_exit() {
         let help = render_repl_help();
-        assert!(help.contains("REPL"));
+        assert!(help.contains("CODE AGENT"));
         assert!(help.contains("/help"));
         assert!(help.contains("Complete commands, modes, and recent sessions"));
         assert!(help.contains("/status"));
@@ -6391,7 +6051,7 @@ mod tests {
         assert!(help.contains("/agents"));
         assert!(help.contains("/skills"));
         assert!(help.contains("/exit"));
-        assert!(help.contains("Auto-save            .claw/sessions/<session-id>.jsonl"));
+        assert!(help.contains("Auto-save            .codex/sessions/<session-id>.jsonl"));
         assert!(help.contains("Resume latest        /resume latest"));
     }
 
@@ -6511,14 +6171,14 @@ mod tests {
         let mut help = Vec::new();
         print_help_to(&mut help).expect("help should render");
         let help = String::from_utf8(help).expect("help should be utf8");
-        assert!(help.contains("claw help"));
-        assert!(help.contains("claw version"));
-        assert!(help.contains("claw status"));
-        assert!(help.contains("claw sandbox"));
-        assert!(help.contains("claw init"));
-        assert!(help.contains("claw agents"));
-        assert!(help.contains("claw skills"));
-        assert!(help.contains("claw /skills"));
+        assert!(help.contains("sebas help"));
+        assert!(help.contains("sebas version"));
+        assert!(help.contains("sebas status"));
+        assert!(help.contains("sebas sandbox"));
+        assert!(help.contains("sebas init"));
+        assert!(help.contains("sebas agents"));
+        assert!(help.contains("sebas skills"));
+        assert!(help.contains("sebas /skills"));
     }
 
     #[test]
@@ -6918,10 +6578,10 @@ UU conflicted.rs",
         let mut help = Vec::new();
         print_help_to(&mut help).expect("help should render");
         let help = String::from_utf8(help).expect("help should be utf8");
-        assert!(help.contains("claw --resume [SESSION.jsonl|session-id|latest]"));
+        assert!(help.contains("sebas --resume [SESSION.jsonl|session-id|latest]"));
         assert!(help.contains("Use `latest` with --resume, /resume, or /session switch"));
-        assert!(help.contains("claw --resume latest"));
-        assert!(help.contains("claw --resume latest /status /diff /export notes.txt"));
+        assert!(help.contains("sebas --resume latest"));
+        assert!(help.contains("sebas --resume latest /status /diff /export notes.txt"));
     }
 
     #[test]
@@ -7007,7 +6667,7 @@ UU conflicted.rs",
     fn resume_usage_mentions_latest_shortcut() {
         let usage = render_resume_usage();
         assert!(usage.contains("/resume <session-path|session-id|latest>"));
-        assert!(usage.contains(".claw/sessions/<session-id>.jsonl"));
+        assert!(usage.contains(".codex/sessions/<session-id>.jsonl"));
         assert!(usage.contains("/session list"));
     }
 
@@ -7453,6 +7113,10 @@ UU conflicted.rs",
 
     #[test]
     fn build_runtime_runs_plugin_lifecycle_init_and_shutdown() {
+        let _guard = env_lock();
+        let previous_openai_api_key = std::env::var("OPENAI_API_KEY").ok();
+        std::env::set_var("OPENAI_API_KEY", "test-openai-key");
+
         let config_home = temp_dir();
         let workspace = temp_dir();
         let source_root = temp_dir();
@@ -7499,6 +7163,11 @@ UU conflicted.rs",
             "init\nshutdown\n"
         );
 
+        if let Some(value) = previous_openai_api_key {
+            std::env::set_var("OPENAI_API_KEY", value);
+        } else {
+            std::env::remove_var("OPENAI_API_KEY");
+        }
         let _ = fs::remove_dir_all(config_home);
         let _ = fs::remove_dir_all(workspace);
         let _ = fs::remove_dir_all(source_root);

@@ -1,6 +1,6 @@
-# 🦞 Claw Code — Rust Implementation
+# Sebas Rust Runtime
 
-A high-performance Rust rewrite of the Claw Code CLI agent harness. Built for speed, safety, and native tool execution.
+Sebas / Codex 互換の Rust 実装です。利用者向けの正規 CLI は `sebas`、`codex` は互換 alias として残します。
 
 ## Quick Start
 
@@ -9,14 +9,14 @@ A high-performance Rust rewrite of the Claw Code CLI agent harness. Built for sp
 cd rust/
 cargo build --release
 
-# Run interactive REPL
-./target/release/claw
+# Run code-first session
+./target/release/sebas
 
-# One-shot prompt
-./target/release/claw prompt "explain this codebase"
+# Run a one-shot coding task
+./target/release/sebas "explain this codebase"
 
 # With specific model
-./target/release/claw --model sonnet prompt "fix the bug in main.rs"
+./target/release/sebas --model sonnet "fix the bug in main.rs"
 ```
 
 ## Configuration
@@ -32,7 +32,7 @@ export ANTHROPIC_BASE_URL="https://your-proxy.com"
 Or authenticate via OAuth:
 
 ```bash
-claw login
+sebas login
 ```
 
 ## Features
@@ -41,14 +41,14 @@ claw login
 |---------|--------|
 | Anthropic API + streaming | ✅ |
 | OAuth login/logout | ✅ |
-| Interactive REPL (rustyline) | ✅ |
+| Code-first session (rustyline) | ✅ |
 | Tool system (bash, read, write, edit, grep, glob) | ✅ |
 | Web tools (search, fetch) | ✅ |
 | Sub-agent orchestration | ✅ |
 | Todo tracking | ✅ |
 | Notebook editing | ✅ |
 | CLAUDE.md / project memory | ✅ |
-| Config file hierarchy (.claude.json) | ✅ |
+| Config file hierarchy (.codex + legacy compatibility) | ✅ |
 | Permission system | ✅ |
 | MCP server lifecycle | ✅ |
 | Session persistence + resume | ✅ |
@@ -75,7 +75,7 @@ Short names resolve to the latest model versions:
 ## CLI Flags
 
 ```
-claw [OPTIONS] [COMMAND]
+sebas [OPTIONS] [COMMAND]
 
 Options:
   --model MODEL                    Set the model (alias or full name)
@@ -86,7 +86,6 @@ Options:
   --version, -V                    Print version info
 
 Commands:
-  prompt <text>      One-shot prompt (non-interactive)
   login              Authenticate via OAuth
   logout             Clear stored credentials
   init               Initialize project config
@@ -94,7 +93,7 @@ Commands:
   self-update        Update to latest version
 ```
 
-## Slash Commands (REPL)
+## Slash Commands (code-first session)
 
 Tab completion now expands not just slash command names, but also common workflow arguments like model aliases, permission modes, and recent session IDs.
 
@@ -125,7 +124,7 @@ rust/
     ├── commands/           # Shared slash-command registry
     ├── compat-harness/     # TS manifest extraction harness
     ├── runtime/            # Session, config, permissions, MCP, prompts
-    ├── rusty-claude-cli/   # Main CLI binary (`claw`)
+    ├── rusty-claude-cli/   # Main CLI binaries (`sebas`, `codex`)
     └── tools/              # Built-in tool implementations
 ```
 
@@ -135,14 +134,14 @@ rust/
 - **commands** — Slash command definitions and help text generation
 - **compat-harness** — Extracts tool/prompt manifests from upstream TS source
 - **runtime** — `ConversationRuntime` agentic loop, `ConfigLoader` hierarchy, `Session` persistence, permission policy, MCP client, system prompt assembly, usage tracking
-- **rusty-claude-cli** — REPL, one-shot prompt, streaming display, tool call rendering, CLI argument parsing
-- **tools** — Tool specs + execution: Bash, ReadFile, WriteFile, EditFile, GlobSearch, GrepSearch, WebSearch, WebFetch, Agent, TodoWrite, NotebookEdit, Skill, ToolSearch, REPL runtimes
+- **rusty-claude-cli** — code-first session, one-shot coding tasks, streaming display, tool call rendering, CLI argument parsing
+- **tools** — Tool specs + execution: Bash, ReadFile, WriteFile, EditFile, GlobSearch, GrepSearch, WebSearch, WebFetch, Agent, TodoWrite, NotebookEdit, Skill, ToolSearch, session runtimes
 
 ## Stats
 
-- **~20K lines** of Rust
+- **~43K lines** of Rust
 - **6 crates** in workspace
-- **Binary name:** `claw`
+- **Primary binary:** `sebas` (`codex` alias available)
 - **Default model:** `claude-opus-4-6`
 - **Default permissions:** `danger-full-access`
 
