@@ -192,7 +192,7 @@ pub fn max_tokens_for_model(model: &str) -> u32 {
     if canonical.contains("opus") {
         32_000
     } else {
-        64_000
+        8_192
     }
 }
 
@@ -219,6 +219,6 @@ mod tests {
     #[test]
     fn keeps_existing_max_token_heuristic() {
         assert_eq!(max_tokens_for_model("opus"), 32_000);
-        assert_eq!(max_tokens_for_model("grok-3"), 64_000);
+        assert_eq!(max_tokens_for_model("grok-3"), 8_192);
     }
 }

@@ -17,15 +17,6 @@ It is intentionally conservative:
 - Upstream license and notice requirements should be checked against the imported upstream tree before redistribution
 - If additional Sebas-specific patches are copied elsewhere, keep the upstream attribution with those files
 
-### `qwen-code/`
-
-- Upstream repository: [`QwenLM/qwen-code`](https://github.com/QwenLM/qwen-code)
-- The upstream README says the project is based on Google Gemini CLI
-- License: Apache License 2.0
-- Canonical license file: [`qwen-code/LICENSE`](./qwen-code/LICENSE)
-- Source files in the vendored copy carry upstream copyright headers from Qwen Team and Google LLC
-- Keep the Apache license text and upstream copyright headers with any redistributed copies
-
 ### `flash-moe/`
 
 - Upstream repository: [`danveloper/flash-moe`](https://github.com/danveloper/flash-moe)
