@@ -107,6 +107,30 @@ fn slash_command_names_match_known_commands_and_suggest_nearby_unknown_ones() {
 }
 
 #[test]
+fn help_output_presents_the_code_first_entrypoint_and_hides_legacy_prompt_modes() {
+    let temp_dir = unique_temp_dir("help-output");
+    fs::create_dir_all(&temp_dir).expect("temp dir should exist");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_sebas"))
+        .current_dir(&temp_dir)
+        .arg("--help")
+        .output()
+        .expect("sebas should launch");
+
+    assert_success(&output);
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("sebas [PROMPT...]"));
+    assert!(stdout.contains("code-first agent"));
+    assert!(stdout.contains("sebas engine <start|doctor|status|bench>"));
+    assert!(!stdout.contains("sebas chat"));
+    assert!(!stdout.contains("sebas prompt"));
+    assert!(!stdout.contains("codex chat"));
+    assert!(!stdout.contains("codex prompt"));
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+}
+
+#[test]
 fn config_command_loads_defaults_from_standard_config_locations() {
     // given
     let temp_dir = unique_temp_dir("config-defaults");
