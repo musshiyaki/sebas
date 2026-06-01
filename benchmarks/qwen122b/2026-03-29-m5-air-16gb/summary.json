@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "2026-03-29-m5-air-16gb",
+  "model": "mlx-community/Qwen3.5-122B-A10B-4bit",
+  "hardware": "MacBook Air, Apple M5, 16 GB",
+  "metrics": {
+    "short_ja_smoke": {
+      "prefill_tok_s": 3.0,
+      "decode_tok_s": 3.2
+    },
+    "long_ja_benchmark": {
+      "prompt_tokens": 47,
+      "ttft_s": 16.4,
+      "prefill_tok_s": 2.9,
+      "generation_tok_s": 3.1
+    },
+    "per_token_trace_ms": {
+      "dense_attention": 79.6,
+      "o_proj_shared_path": 32.3,
+      "routed_expert_io": 194.6,
+      "routed_expert_compute": 1.5,
+      "total": 314.7
+    }
+  },
+  "bottleneck": "expert weight movement from SSD",
+  "raw_logs_available": false,
+  "notes": "Summary extracted from docs/qwen122b-porting.md. Recapture raw logs with tools/collect-qwen122b-repro-pack before launch."
+}

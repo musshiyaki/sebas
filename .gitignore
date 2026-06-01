@@ -16,3 +16,4 @@ qwen-code/
 # Local/generated assets.
 project-docs/*.png
 project-docs/ollama-web-search-mcp/node_modules/
+benchmarks/qwen122b/generated/

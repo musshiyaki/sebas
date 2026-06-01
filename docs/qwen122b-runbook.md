@@ -106,6 +106,15 @@ Suggested table:
 | smoke-ja-short | 32 | 64 | TBD | ~3.0 | ~3.2 | TBD | warm cache |
 | benchmark-ja-long | 47 | TBD | ~16.4s | ~2.9 | ~3.1 | TBD | measured bring-up |
 
+You can collect the standard Sebas benchmark pack with:
+
+```bash
+tools/collect-qwen122b-repro-pack --case all
+```
+
+See [qwen122b-repro-pack.md](qwen122b-repro-pack.md) for the pack format and
+release workflow.
+
 ## Known Limits
 
 - The 122B path is text-only.

@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENGINE_DIR="$ROOT_DIR/flash-moe-anemll-ios"
+MODEL_DIR="${MODEL_DIR:-$HOME/Models/flash_moe_qwen3.5_122b_4bit}"
+BENCH_CASE="${BENCH_CASE:-all}"
+RUN_BENCH=1
+OUT_DIR=""
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  tools/collect-qwen122b-repro-pack [options]
+
+Options:
+  --out DIR          Output directory for the collected pack
+  --engine-dir DIR   Flash-MoE engine checkout path
+  --model-dir DIR    Prepared Qwen3.5-122B-A10B model directory
+  --case CASE        Benchmark case: short, long, or all
+  --skip-bench       Capture environment and doctor output without running bench
+  -h, --help         Show this help
+
+Environment:
+  MODEL_DIR          Prepared model directory override
+  BENCH_CASE         Benchmark case override
+
+The generated pack is intended for GitHub Releases or benchmark review. It does
+not copy model weights.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --out)
+      OUT_DIR="${2:?missing value for --out}"
+      shift 2
+      ;;
+    --engine-dir)
+      ENGINE_DIR="${2:?missing value for --engine-dir}"
+      shift 2
+      ;;
+    --model-dir)
+      MODEL_DIR="${2:?missing value for --model-dir}"
+      shift 2
+      ;;
+    --case)
+      BENCH_CASE="${2:?missing value for --case}"
+      shift 2
+      ;;
+    --skip-bench)
+      RUN_BENCH=0
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+case "$BENCH_CASE" in
+  short|long|all) ;;
+  *)
+    echo "ERROR: --case must be one of: short, long, all" >&2
+    exit 2
+    ;;
+esac
+
+pack_id="$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+if [[ -z "$OUT_DIR" ]]; then
+  OUT_DIR="$ROOT_DIR/benchmarks/qwen122b/generated/$pack_id"
+fi
+
+mkdir -p "$OUT_DIR/raw" "$OUT_DIR/logs"
+
+capture_status() {
+  local name="$1"
+  shift
+  {
+    printf 'command:'
+    printf ' %q' "$@"
+    printf '\n'
+  } >"$OUT_DIR/logs/$name.command.txt"
+
+  set +e
+  "$@" >"$OUT_DIR/logs/$name.stdout.log" 2>"$OUT_DIR/logs/$name.stderr.log"
+  local status=$?
+  set -e
+  printf '%s\n' "$status" >"$OUT_DIR/logs/$name.exit-code.txt"
+  return 0
+}
+
+sebas_commit="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true)"
+engine_commit=""
+if [[ -d "$ENGINE_DIR/.git" ]]; then
+  engine_commit="$(git -C "$ENGINE_DIR" rev-parse HEAD 2>/dev/null || true)"
+fi
+
+{
+  echo "# Sebas Qwen3.5-122B-A10B Repro Pack"
+  echo
+  echo "- collected_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "- sebas_commit: ${sebas_commit:-unknown}"
+  echo "- engine_commit: ${engine_commit:-unknown}"
+  echo "- engine_dir: $ENGINE_DIR"
+  echo "- model_dir: $MODEL_DIR"
+  echo "- bench_case: $BENCH_CASE"
+  echo "- bench_requested: $RUN_BENCH"
+  echo
+  echo "This pack captures environment metadata, command output, and benchmark logs."
+  echo "It intentionally does not include model weights or prepared expert files."
+} >"$OUT_DIR/README.md"
+
+{
+  echo "== time =="
+  date -u
+  echo
+  echo "== macOS =="
+  sw_vers 2>/dev/null || true
+  echo
+  echo "== uname =="
+  uname -a 2>/dev/null || true
+  echo
+  echo "== cpu =="
+  sysctl -n machdep.cpu.brand_string 2>/dev/null || true
+  echo
+  echo "== memory =="
+  sysctl -n hw.memsize 2>/dev/null || true
+  echo
+  echo "== disk =="
+  df -h "$ROOT_DIR" "$HOME" 2>/dev/null || df -h 2>/dev/null || true
+} >"$OUT_DIR/environment.txt"
+
+if command -v python3 >/dev/null 2>&1; then
+  COLLECTED_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  SEBAS_COMMIT="$sebas_commit" \
+  ENGINE_COMMIT="$engine_commit" \
+  ENGINE_DIR="$ENGINE_DIR" \
+  MODEL_DIR="$MODEL_DIR" \
+  BENCH_CASE="$BENCH_CASE" \
+  CHIP="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || true)" \
+  MEM_BYTES="$(sysctl -n hw.memsize 2>/dev/null || true)" \
+  MACOS_VERSION="$(sw_vers -productVersion 2>/dev/null || true)" \
+  python3 - <<'PY' >"$OUT_DIR/environment.json"
+import json
+import os
+
+print(json.dumps({
+    "collected_utc": os.environ.get("COLLECTED_UTC"),
+    "sebas_commit": os.environ.get("SEBAS_COMMIT") or None,
+    "engine_commit": os.environ.get("ENGINE_COMMIT") or None,
+    "engine_dir": os.environ.get("ENGINE_DIR"),
+    "model_dir": os.environ.get("MODEL_DIR"),
+    "bench_case": os.environ.get("BENCH_CASE"),
+    "hardware": {
+        "chip": os.environ.get("CHIP") or None,
+        "memory_bytes": int(os.environ["MEM_BYTES"]) if os.environ.get("MEM_BYTES", "").isdigit() else None,
+        "macos_version": os.environ.get("MACOS_VERSION") or None,
+    },
+}, indent=2, sort_keys=True))
+PY
+fi
+
+{
+  echo "== sebas git =="
+  git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true
+  git -C "$ROOT_DIR" status --short --branch 2>/dev/null || true
+  echo
+  echo "== engine git =="
+  if [[ -d "$ENGINE_DIR/.git" ]]; then
+    git -C "$ENGINE_DIR" rev-parse HEAD 2>/dev/null || true
+    git -C "$ENGINE_DIR" status --short --branch 2>/dev/null || true
+  else
+    echo "engine checkout not found at $ENGINE_DIR"
+  fi
+} >"$OUT_DIR/git-state.txt"
+
+{
+  echo "model_dir: $MODEL_DIR"
+  if [[ -d "$MODEL_DIR" ]]; then
+    echo
+    echo "== du =="
+    du -sh "$MODEL_DIR" 2>/dev/null || true
+    echo
+    echo "== top-level files =="
+    find "$MODEL_DIR" -maxdepth 2 -type f -print 2>/dev/null | sort | sed -n '1,200p'
+  else
+    echo "missing model directory"
+  fi
+} >"$OUT_DIR/model-layout.txt"
+
+export ENGINE_DIR MODEL_DIR
+
+capture_status sebas-help "$ROOT_DIR/sebas" --help
+capture_status sebas-engine-doctor "$ROOT_DIR/sebas" engine doctor --engine qwen122b
+
+if [[ "$RUN_BENCH" == "1" ]]; then
+  if [[ -x "$ENGINE_DIR/scripts/bench_122b.sh" ]]; then
+    {
+      echo "BENCH_CASE=$BENCH_CASE"
+      echo "MODEL_DIR=$MODEL_DIR"
+      echo "script=$ENGINE_DIR/scripts/bench_122b.sh"
+    } >"$OUT_DIR/raw/bench_122b.command.txt"
+    set +e
+    BENCH_CASE="$BENCH_CASE" "$ENGINE_DIR/scripts/bench_122b.sh" "$MODEL_DIR" \
+      >"$OUT_DIR/raw/bench_122b.log" 2>&1
+    bench_status=$?
+    set -e
+    printf '%s\n' "$bench_status" >"$OUT_DIR/raw/bench_122b.exit-code.txt"
+  else
+    {
+      echo "Skipped benchmark: engine script not found or not executable."
+      echo "Expected: $ENGINE_DIR/scripts/bench_122b.sh"
+    } >"$OUT_DIR/raw/bench_122b.log"
+    printf '127\n' >"$OUT_DIR/raw/bench_122b.exit-code.txt"
+  fi
+else
+  echo "Benchmark skipped by --skip-bench." >"$OUT_DIR/raw/bench_122b.log"
+  printf '0\n' >"$OUT_DIR/raw/bench_122b.exit-code.txt"
+fi
+
+capture_status prepared-model-size bash -lc 'test -d "$MODEL_DIR" && du -sh "$MODEL_DIR" || true'
+capture_status engine-binary bash -lc 'test -x "$ENGINE_DIR/metal_infer/infer" && "$ENGINE_DIR/metal_infer/infer" --help || true'
+
+echo "Wrote repro pack: $OUT_DIR"

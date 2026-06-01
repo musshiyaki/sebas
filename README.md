@@ -27,6 +27,11 @@ The current bottleneck is expert weight movement from SSD, not Metal math
 throughput. See [qwen122b-porting.md](docs/qwen122b-porting.md) for the
 measured timing breakdown and architecture notes.
 
+The first tracked benchmark summary lives in
+[`benchmarks/qwen122b/2026-03-29-m5-air-16gb`](benchmarks/qwen122b/2026-03-29-m5-air-16gb/).
+Use [`tools/collect-qwen122b-repro-pack`](tools/collect-qwen122b-repro-pack)
+to collect raw logs, environment metadata, and doctor output for a new run.
+
 ## Why This Works
 
 Qwen3.5-122B-A10B is a Mixture-of-Experts model. Only a subset of routed experts
@@ -147,6 +152,8 @@ Related docs:
 
 - [Qwen3.5-122B porting notes](docs/qwen122b-porting.md)
 - [Qwen3.5-122B runbook](docs/qwen122b-runbook.md)
+- [Reproducibility pack workflow](docs/qwen122b-repro-pack.md)
+- [Tracked benchmark summaries](benchmarks/qwen122b/)
 - [Workspace architecture](docs/WORKSPACE_ARCHITECTURE.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 

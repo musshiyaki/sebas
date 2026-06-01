@@ -1,0 +1,26 @@
+{
+  "date_measured": "2026-03-29",
+  "hardware": {
+    "machine": "MacBook Air",
+    "chip": "Apple M5",
+    "unified_memory_gb": 16,
+    "macos_version": "26.4"
+  },
+  "model": {
+    "source": "mlx-community/Qwen3.5-122B-A10B-4bit",
+    "prepared_path": "~/Models/flash_moe_qwen3.5_122b_4bit",
+    "format": "MLX 4-bit source, Flash-MoE prepared output"
+  },
+  "runtime": {
+    "engine": "Flash-MoE style Apple Silicon runtime",
+    "mode": "text-only",
+    "expert_loading": "SSD-streamed routed experts",
+    "gguf_overlay_required": false,
+    "default_cache_io_split": 2
+  },
+  "evidence": {
+    "raw_logs_available": false,
+    "source_doc": "docs/qwen122b-porting.md",
+    "recapture_tool": "tools/collect-qwen122b-repro-pack"
+  }
+}
