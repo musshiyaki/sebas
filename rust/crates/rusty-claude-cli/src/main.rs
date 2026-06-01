@@ -78,6 +78,7 @@ const DEFAULT_OAUTH_CALLBACK_PORT: u16 = 4545;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUILD_TARGET: Option<&str> = option_env!("TARGET");
 const GIT_SHA: Option<&str> = option_env!("GIT_SHA");
+const BUILD_DATE: Option<&str> = option_env!("BUILD_DATE");
 const INTERNAL_PROGRESS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3);
 const DEFAULT_MAX_TOOL_ITERATIONS: usize = 12;
 const CLI_OPTION_SUGGESTIONS: &[&str] = &[
@@ -242,7 +243,16 @@ impl CliOutputFormat {
 }
 
 fn workspace_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize()?)
+    if let Some(path) = env::var_os("SEBAS_WORKSPACE") {
+        return Ok(PathBuf::from(path).canonicalize()?);
+    }
+
+    let source_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    if source_root.exists() {
+        return Ok(source_root.canonicalize()?);
+    }
+
+    Ok(env::current_dir()?.canonicalize()?)
 }
 
 fn split_passthrough_args(args: &[String]) -> (Vec<String>, Vec<String>) {
@@ -3687,8 +3697,9 @@ fn parse_titled_body(value: &str) -> Option<(String, String)> {
 fn render_version_report() -> String {
     let git_sha = GIT_SHA.unwrap_or("unknown");
     let target = BUILD_TARGET.unwrap_or("unknown");
+    let build_date = BUILD_DATE.unwrap_or(DEFAULT_DATE);
     format!(
-        "Sebas\n  Version          {VERSION}\n  Git SHA          {git_sha}\n  Target           {target}\n  Build date       {DEFAULT_DATE}"
+        "Sebas\n  Version          {VERSION}\n  Git SHA          {git_sha}\n  Target           {target}\n  Build date       {build_date}"
     )
 }
 

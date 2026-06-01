@@ -13,6 +13,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build ${{ matrix.target }}
@@ -51,6 +54,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export BUILD_DATE="$(date -u +%Y-%m-%d)"
+          export GIT_SHA="$GITHUB_SHA"
+          export TARGET="${{ matrix.target }}"
           cargo build \
             --locked \
             --release \
