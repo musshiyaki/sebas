@@ -1,5 +1,7 @@
 # Sebas
 
+[English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+
 [![Latest release](https://img.shields.io/github/v/release/musshiyaki/sebas?sort=semver)](https://github.com/musshiyaki/sebas/releases/latest)
 [![Install](https://img.shields.io/badge/install-curl%20%7C%20sh-2ea44f)](#install)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
