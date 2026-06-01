@@ -16,8 +16,9 @@ and experimentation.
 
 ## Demo
 
-Demo media is temporarily removed while the direct-camera footage is reviewed
-for device privacy. A redacted demo will be linked here after review.
+![Sebas running Qwen3.5-122B-A10B locally](docs/assets/sebas-demo-running.gif)
+
+Cropped direct-camera run of Qwen3.5-122B-A10B on a 16 GB MacBook Air.
 
 ## Install
 
