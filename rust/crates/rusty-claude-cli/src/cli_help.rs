@@ -126,9 +126,9 @@ pub fn print_help_to(
     writeln!(out, "Examples:")?;
     writeln!(out, "  {primary_binary_name}")?;
     writeln!(out, "  {primary_binary_name} \"explain src/main.rs\"")?;
-    writeln!(out, "  {primary_binary_name} engine doctor --engine qwen35b")?;
+    writeln!(out, "  {primary_binary_name} engine doctor --engine qwen122b")?;
     writeln!(out, "  {primary_binary_name} search \"today's japan headlines\"")?;
-    writeln!(out, "  {primary_binary_name} model set qwen35b")?;
+    writeln!(out, "  {primary_binary_name} model set qwen122b")?;
     writeln!(out, "  {primary_binary_name} config import-qwen")?;
     writeln!(out, "  {primary_binary_name} --resume {latest_session_reference}")?;
     writeln!(

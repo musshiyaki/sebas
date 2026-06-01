@@ -71,7 +71,7 @@ use managed_sessions::{
 };
 use runtime::PRIMARY_CLI_NAME;
 
-const DEFAULT_MODEL: &str = "qwen35b";
+const DEFAULT_MODEL: &str = "qwen122b";
 const PRIMARY_BINARY_NAME: &str = PRIMARY_CLI_NAME;
 const DEFAULT_DATE: &str = "2026-03-31";
 const DEFAULT_OAUTH_CALLBACK_PORT: u16 = 4545;
