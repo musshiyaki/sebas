@@ -99,6 +99,10 @@ const CLI_OPTION_SUGGESTIONS: &[&str] = &[
 
 type AllowedToolSet = BTreeSet<String>;
 
+fn default_engine_kind() -> Result<EngineKind, std::io::Error> {
+    EngineKind::parse(DEFAULT_MODEL).map_err(std::io::Error::other)
+}
+
 fn main() {
     if let Err(error) = run() {
         let message = error.to_string();
@@ -123,7 +127,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         && matches!(action, CliAction::Prompt { .. } | CliAction::Repl { .. })
     {
         let runtime =
-            load_runtime(&workspace_root()?, EngineKind::Qwen35b).map_err(std::io::Error::other)?;
+            load_runtime(&workspace_root()?, default_engine_kind()?).map_err(std::io::Error::other)?;
         match &mut action {
             CliAction::Prompt { model, .. } | CliAction::Repl { model, .. } => {
                 *model = runtime.model_id();
@@ -411,7 +415,7 @@ fn prepare_sebas_args(
 
     if engine_runtime.is_none() && !has_model_flag(&args) && should_infer_default_engine(&args) {
         engine_runtime =
-            Some(load_runtime(&root_dir, EngineKind::Qwen35b).map_err(std::io::Error::other)?);
+            Some(load_runtime(&root_dir, default_engine_kind()?).map_err(std::io::Error::other)?);
     }
 
     if let Some(runtime) = engine_runtime.as_ref() {
