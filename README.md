@@ -16,9 +16,10 @@ and experimentation.
 
 ## Demo
 
-![Sebas running Qwen3.5-122B-A10B locally](docs/assets/sebas-demo-running.gif)
+[![Sebas running Qwen3.5-122B-A10B locally](docs/assets/sebas-demo-running.gif)](https://youtu.be/rn0uhik0bL0)
 
 Cropped direct-camera run of Qwen3.5-122B-A10B on a 16 GB MacBook Air.
+[Watch the full demo on YouTube](https://youtu.be/rn0uhik0bL0).
 
 ## Install
 
