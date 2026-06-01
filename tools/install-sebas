@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE_PATH="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE_PATH" ]]; do
+  SOURCE_DIR="$(cd -P "$(dirname "$SOURCE_PATH")" && pwd)"
+  SOURCE_PATH="$(readlink "$SOURCE_PATH")"
+  if [[ "$SOURCE_PATH" != /* ]]; then
+    SOURCE_PATH="$SOURCE_DIR/$SOURCE_PATH"
+  fi
+done
+
+ROOT_DIR="$(cd -P "$(dirname "$SOURCE_PATH")/.." && pwd)"
+PREFIX="${SEBAS_INSTALL_PREFIX:-$HOME/.local}"
+BIN_DIR="${SEBAS_INSTALL_BIN_DIR:-}"
+BUILD=1
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  tools/install-sebas [options]
+
+Options:
+  --prefix DIR      Install under DIR/bin (default: ~/.local)
+  --bin-dir DIR     Install the sebas binary directly into DIR
+  --no-build        Reuse rust/target/release/sebas instead of building
+  -h, --help        Show this help
+
+Environment:
+  SEBAS_INSTALL_PREFIX   Default install prefix
+  SEBAS_INSTALL_BIN_DIR  Default binary install directory
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prefix)
+      PREFIX="${2:?missing value for --prefix}"
+      shift 2
+      ;;
+    --bin-dir)
+      BIN_DIR="${2:?missing value for --bin-dir}"
+      shift 2
+      ;;
+    --no-build)
+      BUILD=0
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$BIN_DIR" ]]; then
+  BIN_DIR="$PREFIX/bin"
+fi
+
+if [[ "$BUILD" == "1" ]]; then
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "ERROR: cargo was not found. Install Rust from https://rustup.rs/ and retry." >&2
+    exit 1
+  fi
+
+  echo "Building Sebas release CLI..."
+  cargo build \
+    --quiet \
+    --release \
+    --manifest-path "$ROOT_DIR/rust/Cargo.toml" \
+    -p sebas-cli \
+    --bin sebas
+fi
+
+SOURCE_BIN="$ROOT_DIR/rust/target/release/sebas"
+DEST_BIN="$BIN_DIR/sebas"
+
+if [[ ! -x "$SOURCE_BIN" ]]; then
+  echo "ERROR: built sebas binary not found at $SOURCE_BIN" >&2
+  echo "Run without --no-build, or build it with: cargo build --release --manifest-path rust/Cargo.toml -p sebas-cli --bin sebas" >&2
+  exit 1
+fi
+
+mkdir -p "$BIN_DIR"
+install -m 0755 "$SOURCE_BIN" "$DEST_BIN"
+
+echo "Installed sebas to $DEST_BIN"
+"$DEST_BIN" --version
+
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *)
+    echo
+    echo "Add this to your shell profile if sebas is not found:"
+    echo "  export PATH=\"$BIN_DIR:\$PATH\""
+    ;;
+esac
+
+echo
+echo "Try:"
+echo "  sebas --help"

@@ -72,6 +72,26 @@ The public entrypoint is the top-level `./sebas` command.
 ./sebas --help
 ```
 
+## Install
+
+Sebas can be installed from source today:
+
+```bash
+git clone https://github.com/musshiyaki/sebas.git
+cd sebas
+tools/install-sebas
+sebas --help
+```
+
+The installer builds the Rust CLI and copies `sebas` to `~/.local/bin` by
+default. See [install.md](docs/install.md) for custom install paths and PATH
+setup.
+
+This installs the CLI only. The 122B path still needs a prepared model and the
+external engine checkout described in [qwen122b-runbook.md](docs/qwen122b-runbook.md).
+
+## Local Engine Setup
+
 For local engine commands, create a local workspace manifest first:
 
 ```bash
@@ -123,7 +143,7 @@ Still experimental:
 - fast mode / malloc-backed expert cache stability
 - arbitrary MoE model support beyond the Qwen3.5 shape family
 - vision tensors
-- general-purpose installer experience
+- prebuilt releases and package-manager installers
 
 ## Optional Agent Runtime
 
@@ -150,6 +170,7 @@ Anemll fork extends that direction for Apple Silicon and the 122B Qwen3.5 path.
 
 Related docs:
 
+- [Installing Sebas](docs/install.md)
 - [Qwen3.5-122B porting notes](docs/qwen122b-porting.md)
 - [Qwen3.5-122B runbook](docs/qwen122b-runbook.md)
 - [Reproducibility pack workflow](docs/qwen122b-repro-pack.md)
