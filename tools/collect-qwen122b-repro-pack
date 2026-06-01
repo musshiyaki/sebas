@@ -5,8 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENGINE_DIR="$ROOT_DIR/flash-moe-anemll-ios"
 MODEL_DIR="${MODEL_DIR:-$HOME/Models/flash_moe_qwen3.5_122b_4bit}"
 BENCH_CASE="${BENCH_CASE:-all}"
+BENCH_LANG="${BENCH_LANG:-ja}"
+BENCH_SHORT_TOKENS="${BENCH_SHORT_TOKENS:-48}"
+BENCH_LONG_TOKENS="${BENCH_LONG_TOKENS:-160}"
 RUN_BENCH=1
 OUT_DIR=""
+BENCH_SHORT_PROMPT_EN="In English, without showing your reasoning, introduce yourself in two short sentences."
+BENCH_LONG_PROMPT_EN="In English, explain Mount Fuji in six sentences. Do not show your reasoning. Do not use bullet points."
+BENCH_SHORT_PROMPT_ZH="请用简体中文回答，不要展示推理过程，用两句简短的话介绍你自己。"
+BENCH_LONG_PROMPT_ZH="请用简体中文用六句话介绍富士山。不要展示推理过程，不要使用项目符号。"
 
 usage() {
   cat <<'USAGE'
@@ -18,12 +25,18 @@ Options:
   --engine-dir DIR   Flash-MoE engine checkout path
   --model-dir DIR    Prepared Qwen3.5-122B-A10B model directory
   --case CASE        Benchmark case: short, long, or all
+  --lang LANG        Benchmark language: ja, en, zh, both, or all
+  --short-tokens N   Short benchmark generation tokens
+  --long-tokens N    Long benchmark generation tokens
   --skip-bench       Capture environment and doctor output without running bench
   -h, --help         Show this help
 
 Environment:
   MODEL_DIR          Prepared model directory override
   BENCH_CASE         Benchmark case override
+  BENCH_LANG         Benchmark language override
+  BENCH_SHORT_TOKENS Short benchmark generation tokens (default: 48)
+  BENCH_LONG_TOKENS  Long benchmark generation tokens (default: 160)
 
 The generated pack is intended for GitHub Releases or benchmark review. It does
 not copy model weights.
@@ -48,6 +61,18 @@ while [[ $# -gt 0 ]]; do
       BENCH_CASE="${2:?missing value for --case}"
       shift 2
       ;;
+    --lang)
+      BENCH_LANG="${2:?missing value for --lang}"
+      shift 2
+      ;;
+    --short-tokens)
+      BENCH_SHORT_TOKENS="${2:?missing value for --short-tokens}"
+      shift 2
+      ;;
+    --long-tokens)
+      BENCH_LONG_TOKENS="${2:?missing value for --long-tokens}"
+      shift 2
+      ;;
     --skip-bench)
       RUN_BENCH=0
       shift
@@ -68,6 +93,28 @@ case "$BENCH_CASE" in
   short|long|all) ;;
   *)
     echo "ERROR: --case must be one of: short, long, all" >&2
+    exit 2
+    ;;
+esac
+
+case "$BENCH_LANG" in
+  ja|en|zh|both|all) ;;
+  *)
+    echo "ERROR: --lang must be one of: ja, en, zh, both, all" >&2
+    exit 2
+    ;;
+esac
+
+case "$BENCH_SHORT_TOKENS" in
+  ''|*[!0-9]*|0)
+    echo "ERROR: --short-tokens must be a positive integer" >&2
+    exit 2
+    ;;
+esac
+
+case "$BENCH_LONG_TOKENS" in
+  ''|*[!0-9]*|0)
+    echo "ERROR: --long-tokens must be a positive integer" >&2
     exit 2
     ;;
 esac
@@ -111,6 +158,9 @@ fi
   echo "- engine_dir: $ENGINE_DIR"
   echo "- model_dir: $MODEL_DIR"
   echo "- bench_case: $BENCH_CASE"
+  echo "- bench_lang: $BENCH_LANG"
+  echo "- bench_short_tokens: $BENCH_SHORT_TOKENS"
+  echo "- bench_long_tokens: $BENCH_LONG_TOKENS"
   echo "- bench_requested: $RUN_BENCH"
   echo
   echo "This pack captures environment metadata, command output, and benchmark logs."
@@ -144,6 +194,9 @@ if command -v python3 >/dev/null 2>&1; then
   ENGINE_DIR="$ENGINE_DIR" \
   MODEL_DIR="$MODEL_DIR" \
   BENCH_CASE="$BENCH_CASE" \
+  BENCH_LANG="$BENCH_LANG" \
+  BENCH_SHORT_TOKENS="$BENCH_SHORT_TOKENS" \
+  BENCH_LONG_TOKENS="$BENCH_LONG_TOKENS" \
   CHIP="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || true)" \
   MEM_BYTES="$(sysctl -n hw.memsize 2>/dev/null || true)" \
   MACOS_VERSION="$(sw_vers -productVersion 2>/dev/null || true)" \
@@ -158,6 +211,9 @@ print(json.dumps({
     "engine_dir": os.environ.get("ENGINE_DIR"),
     "model_dir": os.environ.get("MODEL_DIR"),
     "bench_case": os.environ.get("BENCH_CASE"),
+    "bench_lang": os.environ.get("BENCH_LANG"),
+    "bench_short_tokens": int(os.environ["BENCH_SHORT_TOKENS"]) if os.environ.get("BENCH_SHORT_TOKENS", "").isdigit() else None,
+    "bench_long_tokens": int(os.environ["BENCH_LONG_TOKENS"]) if os.environ.get("BENCH_LONG_TOKENS", "").isdigit() else None,
     "hardware": {
         "chip": os.environ.get("CHIP") or None,
         "memory_bytes": int(os.environ["MEM_BYTES"]) if os.environ.get("MEM_BYTES", "").isdigit() else None,
@@ -204,14 +260,54 @@ if [[ "$RUN_BENCH" == "1" ]]; then
   if [[ -x "$ENGINE_DIR/scripts/bench_122b.sh" ]]; then
     {
       echo "BENCH_CASE=$BENCH_CASE"
+      echo "BENCH_LANG=$BENCH_LANG"
+      echo "BENCH_SHORT_TOKENS=$BENCH_SHORT_TOKENS"
+      echo "BENCH_LONG_TOKENS=$BENCH_LONG_TOKENS"
       echo "MODEL_DIR=$MODEL_DIR"
       echo "script=$ENGINE_DIR/scripts/bench_122b.sh"
     } >"$OUT_DIR/raw/bench_122b.command.txt"
-    set +e
-    BENCH_CASE="$BENCH_CASE" "$ENGINE_DIR/scripts/bench_122b.sh" "$MODEL_DIR" \
-      >"$OUT_DIR/raw/bench_122b.log" 2>&1
-    bench_status=$?
-    set -e
+    : >"$OUT_DIR/raw/bench_122b.log"
+    bench_status=0
+    bench_langs=("$BENCH_LANG")
+    if [[ "$BENCH_LANG" == "both" ]]; then
+      bench_langs=(ja en)
+    elif [[ "$BENCH_LANG" == "all" ]]; then
+      bench_langs=(ja en zh)
+    fi
+    for bench_lang in "${bench_langs[@]}"; do
+      {
+        echo "== language suite: $bench_lang =="
+        echo "BENCH_CASE=$BENCH_CASE BENCH_LANG=$bench_lang SHORT_TOKENS=$BENCH_SHORT_TOKENS LONG_TOKENS=$BENCH_LONG_TOKENS $ENGINE_DIR/scripts/bench_122b.sh $MODEL_DIR"
+      } >>"$OUT_DIR/raw/bench_122b.log"
+      set +e
+      if [[ "$bench_lang" == "en" ]]; then
+        BENCH_CASE="$BENCH_CASE" \
+        BENCH_LANG="$bench_lang" \
+        SHORT_TOKENS="$BENCH_SHORT_TOKENS" \
+        LONG_TOKENS="$BENCH_LONG_TOKENS" \
+        SHORT_PROMPT="$BENCH_SHORT_PROMPT_EN" \
+        LONG_PROMPT="$BENCH_LONG_PROMPT_EN" \
+          "$ENGINE_DIR/scripts/bench_122b.sh" "$MODEL_DIR" >>"$OUT_DIR/raw/bench_122b.log" 2>&1
+      elif [[ "$bench_lang" == "zh" ]]; then
+        BENCH_CASE="$BENCH_CASE" \
+        BENCH_LANG="$bench_lang" \
+        SHORT_TOKENS="$BENCH_SHORT_TOKENS" \
+        LONG_TOKENS="$BENCH_LONG_TOKENS" \
+        SHORT_PROMPT="$BENCH_SHORT_PROMPT_ZH" \
+        LONG_PROMPT="$BENCH_LONG_PROMPT_ZH" \
+          "$ENGINE_DIR/scripts/bench_122b.sh" "$MODEL_DIR" >>"$OUT_DIR/raw/bench_122b.log" 2>&1
+      else
+        BENCH_CASE="$BENCH_CASE" BENCH_LANG="$bench_lang" \
+        SHORT_TOKENS="$BENCH_SHORT_TOKENS" \
+        LONG_TOKENS="$BENCH_LONG_TOKENS" \
+          "$ENGINE_DIR/scripts/bench_122b.sh" "$MODEL_DIR" >>"$OUT_DIR/raw/bench_122b.log" 2>&1
+      fi
+      current_status=$?
+      set -e
+      if [[ "$current_status" != "0" && "$bench_status" == "0" ]]; then
+        bench_status="$current_status"
+      fi
+    done
     printf '%s\n' "$bench_status" >"$OUT_DIR/raw/bench_122b.exit-code.txt"
   else
     {

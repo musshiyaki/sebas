@@ -1,0 +1,73 @@
+{
+  "benchmark_id": "2026-06-01-m5-air-16gb",
+  "date_measured": "2026-06-01",
+  "model": "mlx-community/Qwen3.5-122B-A10B-4bit",
+  "hardware": "MacBook Air, Apple M5, 16 GB",
+  "prepared_model_footprint": "64G",
+  "command": "sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160",
+  "metrics": {
+    "short_ja_smoke": {
+      "prompt_tokens": 38,
+      "requested_tokens": 48,
+      "generated_tokens": 33,
+      "ttft_s": 12.968,
+      "prefill_tok_s": 2.9,
+      "generation_tok_s": 3.40,
+      "total_s": 22.4,
+      "real_s": 22.68
+    },
+    "long_ja_benchmark": {
+      "prompt_tokens": 48,
+      "requested_tokens": 160,
+      "generated_tokens": 147,
+      "ttft_s": 16.075,
+      "prefill_tok_s": 3.0,
+      "generation_tok_s": 2.90,
+      "total_s": 66.4,
+      "real_s": 66.46
+    },
+    "short_en_smoke": {
+      "prompt_tokens": 37,
+      "requested_tokens": 48,
+      "generated_tokens": 30,
+      "ttft_s": 14.704,
+      "prefill_tok_s": 2.5,
+      "generation_tok_s": 3.32,
+      "total_s": 23.4,
+      "real_s": 27.23
+    },
+    "long_en_benchmark": {
+      "prompt_tokens": 44,
+      "requested_tokens": 160,
+      "generated_tokens": 155,
+      "ttft_s": 15.632,
+      "prefill_tok_s": 2.8,
+      "generation_tok_s": 2.86,
+      "total_s": 69.4,
+      "real_s": 69.46
+    },
+    "short_zh_smoke": {
+      "prompt_tokens": 38,
+      "requested_tokens": 48,
+      "generated_tokens": 34,
+      "ttft_s": 12.821,
+      "prefill_tok_s": 3.0,
+      "generation_tok_s": 3.33,
+      "total_s": 22.7,
+      "real_s": 23.16
+    },
+    "long_zh_benchmark": {
+      "prompt_tokens": 41,
+      "requested_tokens": 160,
+      "generated_tokens": 97,
+      "ttft_s": 17.622,
+      "prefill_tok_s": 2.3,
+      "generation_tok_s": 3.07,
+      "total_s": 48.9,
+      "real_s": 48.93
+    }
+  },
+  "bottleneck": "expert weight movement from SSD",
+  "raw_logs_available": true,
+  "notes": "Long benchmark token budget was increased to 160 so public-facing Japanese, English, and Chinese answers complete without visible truncation."
+}

@@ -1,0 +1,51 @@
+[config] K auto-set to 8 from config (use --k N to override)
+bpe_load: 248044 vocab, 247587 merges, 33 added tokens
+Tokens (38): [248045, 8678, 198, 2523, 513, 264, 10631, 17313, 13, 248046, 198, 248045, 846, 198, 139054, 115225, 97913, 3709, 97124, 98845, ...]
+[debug] Top 5 logits (next_token=271):
+  token 198 ("
+") logit=18.7388
+  token 271 ("
+
+") logit=31.8002
+  token 248046 ("<|im_end|>") logit=21.1654
+  token 248044 ("<|endoftext|>") logit=15.9313
+  token 1358 ("
+
+
+") logit=17.8024
+[debug] hidden rms after final_norm=2.1847, logits rms=4.1665
+  [gen 1/48] token_id=103724 (188 ms, 5.33 tok/s)
+  [gen 2/48] token_id=96336 (345 ms, 2.90 tok/s)
+  [gen 3/48] token_id=110619 (336 ms, 2.98 tok/s)
+  [gen 4/48] token_id=97793 (348 ms, 2.87 tok/s)
+  [gen 5/48] token_id=113820 (303 ms, 3.30 tok/s)
+  [gen 6/48] token_id=95974 (263 ms, 3.81 tok/s)
+  [gen 7/48] token_id=96359 (260 ms, 3.85 tok/s)
+  [gen 8/48] token_id=103911 (292 ms, 3.43 tok/s)
+  [gen 9/48] token_id=117356 (291 ms, 3.44 tok/s)
+  [gen 10/48] token_id=95726 (304 ms, 3.29 tok/s)
+  [gen 11/48] token_id=96566 (310 ms, 3.23 tok/s)
+  [gen 12/48] token_id=105019 (285 ms, 3.51 tok/s)
+  [gen 13/48] token_id=98277 (264 ms, 3.79 tok/s)
+  [gen 14/48] token_id=103725 (298 ms, 3.35 tok/s)
+  [gen 15/48] token_id=1710 (321 ms, 3.12 tok/s)
+  [gen 16/48] token_id=95815 (419 ms, 2.39 tok/s)
+  [gen 17/48] token_id=100879 (334 ms, 3.00 tok/s)
+  [gen 18/48] token_id=110511 (334 ms, 3.00 tok/s)
+  [gen 19/48] token_id=101693 (299 ms, 3.35 tok/s)
+  [gen 20/48] token_id=5205 (309 ms, 3.24 tok/s)
+  [gen 21/48] token_id=101804 (326 ms, 3.07 tok/s)
+  [gen 22/48] token_id=97447 (234 ms, 4.28 tok/s)
+  [gen 23/48] token_id=95869 (250 ms, 4.00 tok/s)
+  [gen 24/48] token_id=100653 (262 ms, 3.81 tok/s)
+  [gen 25/48] token_id=128519 (287 ms, 3.48 tok/s)
+  [gen 26/48] token_id=98409 (291 ms, 3.43 tok/s)
+  [gen 27/48] token_id=104062 (276 ms, 3.63 tok/s)
+  [gen 28/48] token_id=95999 (291 ms, 3.44 tok/s)
+  [gen 29/48] token_id=96621 (321 ms, 3.11 tok/s)
+  [gen 30/48] token_id=101741 (242 ms, 4.14 tok/s)
+  [gen 31/48] token_id=96263 (261 ms, 3.83 tok/s)
+  [gen 32/48] token_id=1710 (361 ms, 2.77 tok/s)
+  [gen 33/48] token_id=248046 (407 ms, 2.46 tok/s)
+
+[eos] Token 248046 at position 34

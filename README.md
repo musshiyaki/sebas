@@ -33,21 +33,23 @@ external engine checkout described in [qwen122b-runbook.md](docs/qwen122b-runboo
 ![Sebas social preview](docs/assets/social-preview.png)
 
 Measured on a `MacBook Air (Apple M5, 16 GB)` with
-`mlx-community/Qwen3.5-122B-A10B-4bit` after full local preparation:
+`mlx-community/Qwen3.5-122B-A10B-4bit` after full local preparation. Latest
+tracked run: [`benchmarks/qwen122b/2026-06-01-m5-air-16gb`](benchmarks/qwen122b/2026-06-01-m5-air-16gb/).
 
-| Case | Result |
-|---|---:|
-| Short Japanese smoke prompt, prefill | ~3.0 tok/s |
-| Short Japanese smoke prompt, decode | ~3.2 tok/s |
-| Longer Japanese benchmark, TTFT | ~16.4 s |
-| Longer Japanese benchmark, generation | ~3.1 tok/s |
-| Per-token timing trace | ~314.7 ms/token |
+| Case | TTFT | Generation | Total |
+|---|---:|---:|---:|
+| Japanese short smoke | 12.97 s | 3.40 tok/s | 22.4 s |
+| Japanese long benchmark | 16.08 s | 2.90 tok/s | 66.4 s |
+| English short smoke | 14.70 s | 3.32 tok/s | 23.4 s |
+| English long benchmark | 15.63 s | 2.86 tok/s | 69.4 s |
+| Chinese short smoke | 12.82 s | 3.33 tok/s | 22.7 s |
+| Chinese long benchmark | 17.62 s | 3.07 tok/s | 48.9 s |
 
 The current bottleneck is expert weight movement from SSD, not Metal math
 throughput. See [qwen122b-porting.md](docs/qwen122b-porting.md) for the
 measured timing breakdown and architecture notes.
 
-The first tracked benchmark summary lives in
+The first summary-only baseline lives in
 [`benchmarks/qwen122b/2026-03-29-m5-air-16gb`](benchmarks/qwen122b/2026-03-29-m5-air-16gb/).
 Use [`tools/collect-qwen122b-repro-pack`](tools/collect-qwen122b-repro-pack)
 to collect raw logs, environment metadata, and doctor output for a new run.
@@ -112,6 +114,7 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 
 ./sebas engine doctor --engine qwen122b
 ./sebas engine bench --engine qwen122b
+./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
 ./sebas run engine-only --engine qwen122b
 ```
 

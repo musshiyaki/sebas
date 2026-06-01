@@ -60,7 +60,7 @@ use tools::{
 
 use crate::sebas_engine::{
     ensure_engine_ready, load_runtime, print_engine_doctor, print_engine_status, run_bench,
-    run_demo,
+    run_demo, BenchOptions,
     EngineKind, EngineRuntime,
 };
 use managed_sessions::{
@@ -497,12 +497,116 @@ fn resolve_engine_runtime(
     Ok((runtime, remaining))
 }
 
+fn parse_bench_options(args: &[String]) -> Result<BenchOptions, Box<dyn std::error::Error>> {
+    let mut options = BenchOptions::default();
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--case" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| std::io::Error::other("missing value for --case"))?;
+                validate_bench_case(value)?;
+                options.case = Some(value.clone());
+                index += 2;
+            }
+            flag if flag.starts_with("--case=") => {
+                let value = &flag["--case=".len()..];
+                validate_bench_case(value)?;
+                options.case = Some(value.to_string());
+                index += 1;
+            }
+            "--lang" | "--language" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| std::io::Error::other("missing value for --lang"))?;
+                validate_bench_lang(value)?;
+                options.lang = Some(value.clone());
+                index += 2;
+            }
+            flag if flag.starts_with("--lang=") => {
+                let value = &flag["--lang=".len()..];
+                validate_bench_lang(value)?;
+                options.lang = Some(value.to_string());
+                index += 1;
+            }
+            flag if flag.starts_with("--language=") => {
+                let value = &flag["--language=".len()..];
+                validate_bench_lang(value)?;
+                options.lang = Some(value.to_string());
+                index += 1;
+            }
+            "--short-tokens" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| std::io::Error::other("missing value for --short-tokens"))?;
+                validate_positive_integer(value, "--short-tokens")?;
+                options.short_tokens = Some(value.clone());
+                index += 2;
+            }
+            flag if flag.starts_with("--short-tokens=") => {
+                let value = &flag["--short-tokens=".len()..];
+                validate_positive_integer(value, "--short-tokens")?;
+                options.short_tokens = Some(value.to_string());
+                index += 1;
+            }
+            "--long-tokens" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| std::io::Error::other("missing value for --long-tokens"))?;
+                validate_positive_integer(value, "--long-tokens")?;
+                options.long_tokens = Some(value.clone());
+                index += 2;
+            }
+            flag if flag.starts_with("--long-tokens=") => {
+                let value = &flag["--long-tokens=".len()..];
+                validate_positive_integer(value, "--long-tokens")?;
+                options.long_tokens = Some(value.to_string());
+                index += 1;
+            }
+            other => {
+                return Err(std::io::Error::other(format!(
+                    "unknown bench option: {other}. Use --case short|long|all, --lang ja|en|zh|both|all, or --long-tokens N"
+                ))
+                .into());
+            }
+        }
+    }
+
+    Ok(options)
+}
+
+fn validate_bench_case(value: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match value {
+        "short" | "long" | "all" => Ok(()),
+        _ => Err(std::io::Error::other("bench case must be one of: short, long, all").into()),
+    }
+}
+
+fn validate_bench_lang(value: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match value {
+        "ja" | "en" | "zh" | "both" | "all" => Ok(()),
+        _ => Err(std::io::Error::other(
+            "bench language must be one of: ja, en, zh, both, all",
+        )
+        .into()),
+    }
+}
+
+fn validate_positive_integer(value: &str, flag: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match value.parse::<u32>() {
+        Ok(number) if number > 0 => Ok(()),
+        _ => Err(std::io::Error::other(format!("{flag} must be a positive integer")).into()),
+    }
+}
+
 fn parse_demo_args(
     args: &[String],
 ) -> Result<(EngineKind, String, String, Vec<String>), Box<dyn std::error::Error>> {
     let (explicit_engine, stripped) = extract_engine_arg(args).map_err(std::io::Error::other)?;
     let mut engine = explicit_engine;
-    let mut tokens = "64".to_string();
+    let mut tokens = "128".to_string();
     let mut prompt_parts = Vec::new();
     let mut passthrough = Vec::new();
     let mut index = 0;
@@ -581,7 +685,7 @@ fn try_handle_sebas_direct_commands(
                 .into());
             };
             let (sub_args, passthrough) = split_passthrough_args(&args[2..]);
-            let (runtime, _) = resolve_engine_runtime(&sub_args, None)?;
+            let (runtime, remaining) = resolve_engine_runtime(&sub_args, None)?;
             match action {
                 "start" => {
                     ensure_engine_ready(&runtime).map_err(std::io::Error::other)?;
@@ -594,7 +698,8 @@ fn try_handle_sebas_direct_commands(
                     print_engine_status(&runtime);
                 }
                 "bench" => {
-                    run_bench(&workspace_root()?, runtime.engine, &passthrough)
+                    let options = parse_bench_options(&remaining)?;
+                    run_bench(&workspace_root()?, &runtime, &options, &passthrough)
                         .map_err(std::io::Error::other)?;
                 }
                 other => {
@@ -628,8 +733,9 @@ fn try_handle_sebas_direct_commands(
                 &args[1..]
             };
             let (sub_args, passthrough) = split_passthrough_args(range);
-            let (runtime, _) = resolve_engine_runtime(&sub_args, default_engine)?;
-            run_bench(&workspace_root()?, runtime.engine, &passthrough)
+            let (runtime, remaining) = resolve_engine_runtime(&sub_args, default_engine)?;
+            let options = parse_bench_options(&remaining)?;
+            run_bench(&workspace_root()?, &runtime, &options, &passthrough)
                 .map_err(std::io::Error::other)?;
             Ok(true)
         }

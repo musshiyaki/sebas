@@ -38,7 +38,7 @@ pub fn print_help_to(
     writeln!(out, "      Start the code-first agent or run a one-shot coding task")?;
     writeln!(
         out,
-        "  {primary_binary_name} engine <start|doctor|status|bench> --engine <qwen35b|qwen122b>"
+        "  {primary_binary_name} engine <start|doctor|status|bench> --engine <qwen35b|qwen122b> [--lang ja|en|zh|both|all] [--case short|long|all] [--long-tokens N]"
     )?;
     writeln!(out, "      Manage local OpenAI-compatible inference engines")?;
     writeln!(out, "  {primary_binary_name} demo [PROMPT...]")?;
@@ -129,7 +129,8 @@ pub fn print_help_to(
     writeln!(out, "  {primary_binary_name}")?;
     writeln!(out, "  {primary_binary_name} \"explain src/main.rs\"")?;
     writeln!(out, "  {primary_binary_name} engine doctor --engine qwen122b")?;
-    writeln!(out, "  {primary_binary_name} demo --tokens 32 \"こんにちは。短く自己紹介して\"")?;
+    writeln!(out, "  {primary_binary_name} engine bench --engine qwen122b --lang all --case all --long-tokens 160")?;
+    writeln!(out, "  {primary_binary_name} demo --tokens 160 \"Introduce Sebas to viewers in 20 seconds\"")?;
     writeln!(out, "  {primary_binary_name} search \"today's japan headlines\"")?;
     writeln!(out, "  {primary_binary_name} model set qwen122b")?;
     writeln!(out, "  {primary_binary_name} config import-qwen")?;

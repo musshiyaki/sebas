@@ -76,6 +76,7 @@ From the Sebas workspace root:
 ```bash
 ./sebas engine doctor --engine qwen122b
 ./sebas engine bench --engine qwen122b
+./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
 ./sebas run engine-only --engine qwen122b
 ```
 
@@ -85,6 +86,7 @@ For direct engine execution, use the engine checkout scripts:
 cd flash-moe-anemll-ios
 ./scripts/run_122b.sh "$HOME/Models/flash_moe_qwen3.5_122b_4bit"
 ./scripts/bench_122b.sh "$HOME/Models/flash_moe_qwen3.5_122b_4bit"
+LONG_TOKENS=160 ./scripts/bench_122b.sh "$HOME/Models/flash_moe_qwen3.5_122b_4bit"
 ```
 
 ## Benchmark Artifacts To Publish
@@ -103,13 +105,18 @@ Suggested table:
 
 | Case | Prompt tokens | Generated tokens | TTFT | Prefill tok/s | Decode tok/s | Disk footprint | Notes |
 |---|---:|---:|---:|---:|---:|---:|---|
-| smoke-ja-short | 32 | 64 | TBD | ~3.0 | ~3.2 | TBD | warm cache |
-| benchmark-ja-long | 47 | TBD | ~16.4s | ~2.9 | ~3.1 | TBD | measured bring-up |
+| smoke-ja-short | 38 | 33 | 12.97s | 2.9 | 3.40 | 64G | 2026-06-01 run |
+| benchmark-ja-long | 48 | 147 | 16.08s | 3.0 | 2.90 | 64G | `LONG_TOKENS=160` |
+| smoke-en-short | 37 | 30 | 14.70s | 2.5 | 3.32 | 64G | English prompt |
+| benchmark-en-long | 44 | 155 | 15.63s | 2.8 | 2.86 | 64G | `LONG_TOKENS=160` |
+| smoke-zh-short | 38 | 34 | 12.82s | 3.0 | 3.33 | 64G | Chinese prompt |
+| benchmark-zh-long | 41 | 97 | 17.62s | 2.3 | 3.07 | 64G | `LONG_TOKENS=160` |
 
 You can collect the standard Sebas benchmark pack with:
 
 ```bash
 tools/collect-qwen122b-repro-pack --case all
+tools/collect-qwen122b-repro-pack --case all --lang all --long-tokens 160
 ```
 
 See [qwen122b-repro-pack.md](qwen122b-repro-pack.md) for the pack format and

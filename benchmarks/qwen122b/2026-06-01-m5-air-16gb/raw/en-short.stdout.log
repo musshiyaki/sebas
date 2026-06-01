@@ -1,0 +1,50 @@
+[config] Model: family=moe, hidden=3072, layers=48 (36 linear + 12 full), experts=256 (K=8), moe_dim=1024, vocab=248320
+[metal] Device: Apple M5
+[metal] Shader compile: 2 ms
+[metal] NAX (Metal 4) enabled — tensor matmul for LM head
+[metal] GPU_KV_SEQ = 8192
+[metal] GPU attention buffers: 12 KV caches (16.8 MB each), scores buf 1.0 MB
+[metal] Delta-net GPU buffers: 36 layers (156.3 MB state + 0.2 MB scratch)
+[metal] Inference pipelines ready (multi-expert[16] + shared buffers allocated)
+=== Qwen3.5 Metal Inference Engine ===
+Model:    /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit
+Family:   moe
+Weights:  /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/model_weights.bin
+Manifest: /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/model_weights.json
+Vocab:    /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/vocab.bin
+K:        8 experts/layer
+Quant:    4-bit experts (5308416 bytes each)
+Linear:   fused GPU delta-net
+Tokens:   48
+Cache:    0 entries (disabled)
+[manifest] Loaded 1675 tensors from /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/model_weights.json
+[weights] mmap'd 3.46 GB from /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/model_weights.bin
+[metal] Weight file wrapped as Metal buffer (3.46 GB)
+[vocab] Loaded 248077 tokens
+[prompt] 37 tokens: 248045 8678 198 2523 513 264 10631 17313 13 248046 198 248045 846 198 623 6163 11 1973 8755 678
+[experts] Expert size: 5308416 bytes (5.31 MB)
+[experts] 48/48 packed layer files available (pread fanout)
+[tiered-io] Cold fds (F_NOCACHE) + warm fds (page cached) active
+[tiered-io] Experimental cache fanout: split routed expert preads into 2 page-aligned chunks
+[warmup] Page cache hint: 25.6 ms
+[init] Setup: 90.1 ms
+
+--- Generating 48 tokens ---
+  [prefill] batch embed 37 tokens: 24.3 ms
+[prefill] starting 36 tokens | per-token K=8 skip_experts=0 experts_full_only=0
+[cache] Pre-computed weight pointers for 48 layers
+[prefill done] 36 tokens | 14356 ms | 2.5 tok/s
+[ttft] 14704 ms (prefill 37 tokens + lm_head 5 ms)
+
+--- Output ---
+
+
+I am an AI assistant designed to provide helpful and accurate information. I can help you with tasks ranging from answering questions to solving complex problems.
+
+--- Statistics ---
+Total time:     23.4 s
+TTFT:           14704 ms (prefill: 36 tokens, 2.5 tok/s)
+Tokens:         30 generated
+Generation:     8.7 s (3.32 tok/s)
+Config:         K=8 experts, 48 layers
+KV cache:       none, CPU allocated 49152.0 MiB, CPU active 3.1 MiB

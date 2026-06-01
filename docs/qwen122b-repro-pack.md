@@ -10,6 +10,7 @@ From the Sebas workspace root:
 
 ```bash
 tools/collect-qwen122b-repro-pack --case all
+tools/collect-qwen122b-repro-pack --case all --lang all --long-tokens 160
 ```
 
 Common variants:

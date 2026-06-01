@@ -10,6 +10,7 @@ for the repository.
 
 | Pack | Hardware | Model | Status |
 |---|---|---|---|
+| [`2026-06-01-m5-air-16gb`](2026-06-01-m5-air-16gb/) | MacBook Air, Apple M5, 16 GB | `mlx-community/Qwen3.5-122B-A10B-4bit` | tracked Japanese, English, and Chinese raw logs |
 | [`2026-03-29-m5-air-16gb`](2026-03-29-m5-air-16gb/) | MacBook Air, Apple M5, 16 GB | `mlx-community/Qwen3.5-122B-A10B-4bit` | summary only; raw logs pending recapture |
 
 ## What Counts As Reproducible

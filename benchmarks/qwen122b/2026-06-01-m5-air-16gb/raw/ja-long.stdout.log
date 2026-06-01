@@ -1,0 +1,55 @@
+[config] Model: family=moe, hidden=3072, layers=48 (36 linear + 12 full), experts=256 (K=8), moe_dim=1024, vocab=248320
+[metal] Device: Apple M5
+[metal] Shader compile: 1 ms
+[metal] NAX (Metal 4) enabled — tensor matmul for LM head
+[metal] GPU_KV_SEQ = 8192
+[metal] GPU attention buffers: 12 KV caches (16.8 MB each), scores buf 1.0 MB
+[metal] Delta-net GPU buffers: 36 layers (156.3 MB state + 0.2 MB scratch)
+[metal] Inference pipelines ready (multi-expert[16] + shared buffers allocated)
+=== Qwen3.5 Metal Inference Engine ===
+Model:    /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit
+Family:   moe
+Weights:  /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/model_weights.bin
+Manifest: /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/model_weights.json
+Vocab:    /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/vocab.bin
+K:        8 experts/layer
+Quant:    4-bit experts (5308416 bytes each)
+Linear:   fused GPU delta-net
+Tokens:   160
+Cache:    0 entries (disabled)
+[manifest] Loaded 1675 tensors from /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/model_weights.json
+[weights] mmap'd 3.46 GB from /Users/sorut/Models/flash_moe_qwen3.5_122b_4bit/model_weights.bin
+[metal] Weight file wrapped as Metal buffer (3.46 GB)
+[vocab] Loaded 248077 tokens
+[prompt] 48 tokens: 248045 8678 198 2523 513 264 10631 17313 13 248046 198 248045 846 198 247359 15685 5205 106127 96144 153178
+[experts] Expert size: 5308416 bytes (5.31 MB)
+[experts] 48/48 packed layer files available (pread fanout)
+[tiered-io] Cold fds (F_NOCACHE) + warm fds (page cached) active
+[tiered-io] Experimental cache fanout: split routed expert preads into 2 page-aligned chunks
+[warmup] Page cache hint: 3.2 ms
+[init] Setup: 58.3 ms
+
+--- Generating 160 tokens ---
+  [prefill] batch embed 48 tokens: 3.1 ms
+[prefill] starting 47 tokens | per-token K=8 skip_experts=0 experts_full_only=0
+[cache] Pre-computed weight pointers for 48 layers
+[prefill done] 47 tokens | 15783 ms | 3.0 tok/s
+[ttft] 16075 ms (prefill 48 tokens + lm_head 5 ms)
+
+--- Output ---
+
+
+富士山は日本最高峰の山であり、その美しい円錐形の姿は世界的に有名です。
+標高は三千七百七十六メートルで、静岡県と山梨県の県境に位置しています。
+この山は活火山ですが、現在は噴火の兆候はなく、静かに佇んでいます。
+冬から春先にかけては山頂に雪が残り、その白と青空のコントラストが絶景を生み出します。
+富士山は古くから信仰の対象とされ、多くの参拝者がその麓を訪れてきました。
+二〇一三年にはユネスコの世界文化遺産に登録され、日本の象徴としてさらにその価値が認められています。
+
+--- Statistics ---
+Total time:     66.4 s
+TTFT:           16075 ms (prefill: 47 tokens, 3.0 tok/s)
+Tokens:         147 generated
+Generation:     50.3 s (2.90 tok/s)
+Config:         K=8 experts, 48 layers
+KV cache:       none, CPU allocated 49152.0 MiB, CPU active 9.1 MiB

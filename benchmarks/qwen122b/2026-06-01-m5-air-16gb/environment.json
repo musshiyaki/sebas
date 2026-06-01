@@ -1,0 +1,30 @@
+{
+  "date_measured": "2026-06-01",
+  "hardware": {
+    "machine": "MacBook Air",
+    "chip": "Apple M5",
+    "unified_memory_gb": 16,
+    "macos_version": "26.5"
+  },
+  "model": {
+    "source": "mlx-community/Qwen3.5-122B-A10B-4bit",
+    "prepared_path": "~/Models/flash_moe_qwen3.5_122b_4bit",
+    "prepared_footprint": "64G",
+    "format": "MLX 4-bit source, Flash-MoE prepared output"
+  },
+  "runtime": {
+    "engine": "Flash-MoE style Apple Silicon runtime",
+    "mode": "text-only",
+    "expert_loading": "SSD-streamed routed experts",
+    "gguf_overlay_required": false,
+    "default_cache_io_split": 2
+  },
+  "capture": {
+    "command": "sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160",
+    "sebas_commit_at_measurement": "9b5ab64fd8002596849061ec0db0386dddf04513",
+    "sebas_tree_dirty_at_measurement": true,
+    "engine_commit_at_measurement": "87ca06bb6babadf3673b85a28ce64ecb20894abe",
+    "engine_tree_dirty_at_measurement": true,
+    "raw_logs_available": true
+  }
+}

@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -13,7 +13,20 @@ use serde_json::Value;
 
 const HEALTH_POLL_ATTEMPTS: usize = 240;
 const HEALTH_POLL_DELAY: Duration = Duration::from_millis(250);
-const DEMO_SYSTEM_PROMPT: &str = "You are Sebas, a local AI demo running on this Mac through a 122B 4-bit MoE model. Answer in Japanese. Do not claim you were made by Google, OpenAI, or another lab unless explicitly asked about model provenance.";
+const DEMO_SYSTEM_PROMPT: &str = "\
+You are Sebas, a local AI demo running on this Mac with a 122B 4-bit MoE model. \
+Reply in the user's language, stay concise, and finish within the token budget. \
+Do not claim a maker unless asked.";
+const BENCH_SHORT_PROMPT_EN: &str =
+    "In English, without showing your reasoning, introduce yourself in two short sentences.";
+const BENCH_LONG_PROMPT_EN: &str =
+    "In English, explain Mount Fuji in six sentences. Do not show your reasoning. Do not use bullet points.";
+const BENCH_SHORT_PROMPT_ZH: &str =
+    "请用简体中文回答，不要展示推理过程，用两句简短的话介绍你自己。";
+const BENCH_LONG_PROMPT_ZH: &str =
+    "请用简体中文用六句话介绍富士山。不要展示推理过程，不要使用项目符号。";
+const DEFAULT_BENCH_SHORT_TOKENS: &str = "48";
+const DEFAULT_BENCH_LONG_TOKENS: &str = "160";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineKind {
@@ -59,6 +72,14 @@ pub struct EngineRuntime {
     pub stderr_log: PathBuf,
     pub serve_args: Vec<String>,
     pub validate_args: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct BenchOptions {
+    pub case: Option<String>,
+    pub lang: Option<String>,
+    pub short_tokens: Option<String>,
+    pub long_tokens: Option<String>,
 }
 
 impl EngineRuntime {
@@ -281,20 +302,78 @@ pub fn print_engine_status(runtime: &EngineRuntime) {
     );
 }
 
-pub fn run_bench(root_dir: &Path, engine: EngineKind, passthrough: &[String]) -> Result<(), String> {
-    let script = match engine {
+pub fn run_bench(
+    root_dir: &Path,
+    runtime: &EngineRuntime,
+    options: &BenchOptions,
+    passthrough: &[String],
+) -> Result<(), String> {
+    match options.lang.as_deref().unwrap_or("ja") {
+        "ja" => run_bench_once(root_dir, runtime, options, "ja", passthrough),
+        "en" => run_bench_once(root_dir, runtime, options, "en", passthrough),
+        "zh" => run_bench_once(root_dir, runtime, options, "zh", passthrough),
+        "both" => {
+            run_bench_once(root_dir, runtime, options, "ja", passthrough)?;
+            run_bench_once(root_dir, runtime, options, "en", passthrough)
+        }
+        "all" => {
+            run_bench_once(root_dir, runtime, options, "ja", passthrough)?;
+            run_bench_once(root_dir, runtime, options, "en", passthrough)?;
+            run_bench_once(root_dir, runtime, options, "zh", passthrough)
+        }
+        other => Err(format!("unknown bench language: {other}")),
+    }
+}
+
+fn run_bench_once(
+    root_dir: &Path,
+    runtime: &EngineRuntime,
+    options: &BenchOptions,
+    lang: &str,
+    passthrough: &[String],
+) -> Result<(), String> {
+    let script = match runtime.engine {
         EngineKind::Qwen35b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("bench_35b.sh"),
         EngineKind::Qwen122b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("bench_122b.sh"),
     };
-    let status = Command::new(&script)
-        .args(passthrough)
-        .current_dir(root_dir)
+    println!("== language suite: {lang} ==");
+    let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
+    let mut command = Command::new(&script);
+    command.arg(&runtime.model_dir).args(passthrough).current_dir(infer_dir);
+    if let Some(case) = options.case.as_deref() {
+        command.env("BENCH_CASE", case);
+    }
+    command.env(
+        "SHORT_TOKENS",
+        options
+            .short_tokens
+            .clone()
+            .or_else(|| env::var("SHORT_TOKENS").ok())
+            .unwrap_or_else(|| DEFAULT_BENCH_SHORT_TOKENS.to_string()),
+    );
+    command.env(
+        "LONG_TOKENS",
+        options
+            .long_tokens
+            .clone()
+            .or_else(|| env::var("LONG_TOKENS").ok())
+            .unwrap_or_else(|| DEFAULT_BENCH_LONG_TOKENS.to_string()),
+    );
+    command.env("BENCH_LANG", lang);
+    if lang == "en" {
+        command.env("SHORT_PROMPT", BENCH_SHORT_PROMPT_EN);
+        command.env("LONG_PROMPT", BENCH_LONG_PROMPT_EN);
+    } else if lang == "zh" {
+        command.env("SHORT_PROMPT", BENCH_SHORT_PROMPT_ZH);
+        command.env("LONG_PROMPT", BENCH_LONG_PROMPT_ZH);
+    }
+    let status = command
         .status()
         .map_err(|error| format!("failed to run {}: {error}", script.display()))?;
     if status.success() {
         Ok(())
     } else {
-        Err(format!("bench failed for {}", engine.as_cli_label()))
+        Err(format!("bench failed for {}", runtime.engine.as_cli_label()))
     }
 }
 
@@ -310,7 +389,7 @@ pub fn run_demo(
         EngineKind::Qwen122b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("run_122b.sh"),
     };
     let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
-    let status = Command::new(&script)
+    let mut child = Command::new(&script)
         .arg(&runtime.model_dir)
         .args(passthrough)
         .current_dir(infer_dir)
@@ -320,13 +399,38 @@ pub fn run_demo(
         )
         .env("PROMPT", prompt)
         .env("TOKENS", tokens)
-        .status()
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| format!("failed to run {}: {error}", script.display()))?;
+    let stderr = child.stderr.take().map(|stderr| {
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().map_while(Result::ok) {
+                if !should_suppress_demo_stderr(&line) {
+                    eprintln!("{line}");
+                }
+            }
+        })
+    });
+    let status = child
+        .wait()
+        .map_err(|error| format!("failed to wait for {}: {error}", script.display()))?;
+    if let Some(stderr) = stderr {
+        let _ = stderr.join();
+    }
     if status.success() {
         Ok(())
     } else {
         Err(format!("demo failed for {}", runtime.engine.as_cli_label()))
     }
+}
+
+fn should_suppress_demo_stderr(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with("[config] K auto-set")
+        || trimmed.starts_with("[config] K override")
+        || trimmed.starts_with("bpe_load:")
+        || trimmed.starts_with("Tokens (")
 }
 
 fn required_string<'a>(object: &'a serde_json::Map<String, Value>, key: &str) -> Result<&'a str, String> {
