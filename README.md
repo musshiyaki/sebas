@@ -8,6 +8,8 @@ Qwen3.5 MoE model that does not fit a standard resident-model runtime. The
 optional Rust CLI/agent layer makes that engine usable for local coding, search,
 and experimentation.
 
+![Sebas social preview](docs/assets/social-preview.png)
+
 ## Current Proof Point
 
 Measured on a `MacBook Air (Apple M5, 16 GB)` with
