@@ -10,4 +10,10 @@ while [[ -h "$SOURCE_PATH" ]]; do
   fi
 done
 ROOT_DIR="$(cd -P "$(dirname "$SOURCE_PATH")" && pwd)"
-exec "$ROOT_DIR/codex" "$@"
+RELEASE_BIN="$ROOT_DIR/rust/target/release/sebas"
+
+if [[ -x "$RELEASE_BIN" ]]; then
+  exec "$RELEASE_BIN" "$@"
+fi
+
+exec cargo run --quiet --manifest-path "$ROOT_DIR/rust/Cargo.toml" -p sebas-cli --bin sebas -- "$@"
