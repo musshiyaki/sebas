@@ -1,6 +1,7 @@
 use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -18,6 +19,7 @@ fn no_args_shows_launcher_instead_of_full_help_wall() {
     assert!(stdout.contains("Local 122B-class model runner"));
     assert!(stdout.contains("Default engine   qwen122b"));
     assert!(stdout.contains("Try:"));
+    assert!(stdout.contains("sebas chat"));
     assert!(stdout.contains("sebas --help"));
     assert!(!stdout.contains("Usage:"));
 
@@ -33,6 +35,8 @@ fn help_describes_runner_surface_without_old_branding() {
 
     assert_success(&output);
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("sebas"));
+    assert!(stdout.contains("sebas chat"));
     assert!(stdout.contains("sebas engine <start|doctor|status|bench>"));
     assert!(stdout.contains("sebas demo"));
     assert!(stdout.contains("sebas model"));
@@ -59,6 +63,35 @@ fn model_set_writes_sebas_settings() {
         fs::read_to_string(temp_dir.join(".sebas").join("settings.json")).expect("settings");
     assert!(settings.contains("\"defaultEngine\""));
     assert!(settings.contains("\"qwen35b\""));
+
+    fs::remove_dir_all(temp_dir).expect("cleanup");
+}
+
+#[test]
+fn chat_quit_exits_without_running_model() {
+    let temp_dir = unique_temp_dir("chat-quit");
+    write_minimal_manifest(&temp_dir);
+
+    let mut child = command_in(&temp_dir)
+        .arg("chat")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("sebas should launch");
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(b"/quit\n")
+        .expect("write quit");
+    let output = child.wait_with_output().expect("wait");
+
+    assert_success(&output);
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Sebas local chat"));
+    assert!(stdout.contains("Type /quit to exit."));
+    assert!(stdout.contains("sebas>"));
 
     fs::remove_dir_all(temp_dir).expect("cleanup");
 }
@@ -102,4 +135,38 @@ fn unique_temp_dir(label: &str) -> PathBuf {
         .as_millis();
     let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!("sebas-{label}-{millis}-{counter}"))
+}
+
+fn write_minimal_manifest(root: &Path) {
+    let workspace = root.join(".workspace");
+    fs::create_dir_all(&workspace).expect("workspace dir");
+    fs::write(
+        workspace.join("manifest.json"),
+        r#"{
+  "workspaceVersion": 1,
+  "engines": {
+    "qwen122b": {
+      "repoPath": "engine",
+      "inferBin": "engine/metal_infer/infer",
+      "modelDirEnv": "MODEL_DIR",
+      "defaultModelDir": "~/Models/flash_moe_qwen3.5_122b_4bit",
+      "portEnv": "QWEN122B_HTTP_PORT",
+      "defaultPort": 61234,
+      "prefillBatchEnv": "QWEN122B_PREFILL_BATCH",
+      "defaultPrefillBatch": 32,
+      "thinkBudgetEnv": "QWEN122B_THINK_BUDGET",
+      "defaultThinkBudget": 0,
+      "kvQuantEnv": "QWEN122B_KV_QUANT",
+      "defaultKvQuant": "none",
+      "healthPath": "/health",
+      "pidFile": "qwen122b_http_server.pid",
+      "stdoutLog": "qwen122b_http_server.stdout.log",
+      "stderrLog": "qwen122b_http_server.stderr.log",
+      "serveArgs": [],
+      "validateArgs": []
+    }
+  }
+}"#,
+    )
+    .expect("manifest");
 }

@@ -17,7 +17,7 @@ workspace setup in [qwen122b-runbook.md](qwen122b-runbook.md).
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh
-sebas --help
+sebas
 ```
 
 By default, the installer downloads a prebuilt binary for your platform and
@@ -33,13 +33,13 @@ Supported release assets:
 ## Install A Specific Version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh -s -- --version v0.1.3
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh -s -- --version v0.1.4
 ```
 
 You can also set the version with an environment variable:
 
 ```bash
-SEBAS_VERSION=v0.1.3 sh -c "$(curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh)"
+SEBAS_VERSION=v0.1.4 sh -c "$(curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh)"
 ```
 
 ## Source Build Fallback
@@ -56,7 +56,7 @@ To force a source build:
 git clone https://github.com/musshiyaki/sebas.git
 cd sebas
 tools/install-sebas
-sebas --help
+sebas
 ```
 
 Or:
@@ -96,7 +96,7 @@ curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | 
 
 ```bash
 sebas --version
-sebas --help
+sebas
 ```
 
 For engine work, run these from a Sebas workspace after copying the example

@@ -12,6 +12,10 @@ done
 ROOT_DIR="$(cd -P "$(dirname "$SOURCE_PATH")" && pwd)"
 RELEASE_BIN="$ROOT_DIR/rust/target/release/sebas"
 
+if [[ -z "${SEBAS_WORKSPACE:-}" ]]; then
+  export SEBAS_WORKSPACE="$ROOT_DIR"
+fi
+
 if [[ -x "$RELEASE_BIN" ]]; then
   exec "$RELEASE_BIN" "$@"
 fi

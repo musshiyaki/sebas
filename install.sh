@@ -221,5 +221,5 @@ if [ "$PRINT_FOOTER" = "1" ]; then
 
   echo
   echo "Try:"
-  echo "  sebas --help"
+  echo "  sebas"
 fi

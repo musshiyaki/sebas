@@ -11,7 +11,7 @@ weights from SSD instead of trying to keep the whole model resident in memory.
 
 Sebas is focused on one thing: a local Apple Silicon inference path for a
 Qwen3.5 MoE model that does not fit a standard resident-model runtime. The Rust
-CLI is a thin operational wrapper for setup, demo, doctor, and benchmark
+CLI is a thin operational wrapper for local chat, demo, doctor, and benchmark
 commands.
 
 ## Demo
@@ -27,7 +27,7 @@ Install the latest prebuilt Sebas CLI:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh
-sebas --help
+sebas
 ```
 
 The installer copies `sebas` to `~/.local/bin` by default. See
@@ -100,7 +100,7 @@ operational wrapper around the engine and benchmark workflow.
 The public entrypoint is the top-level `./sebas` command.
 
 ```bash
-./sebas --help
+./sebas
 ```
 
 Or build from source:
@@ -109,7 +109,7 @@ Or build from source:
 git clone https://github.com/musshiyaki/sebas.git
 cd sebas
 tools/install-sebas
-sebas --help
+sebas
 ```
 
 ## Local Engine Setup
@@ -130,6 +130,7 @@ cp .workspace.example/manifest.json .workspace/manifest.json
 cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 
 ./sebas engine doctor --engine qwen122b
+./sebas chat
 ./sebas engine bench --engine qwen122b
 ./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
 ./sebas run engine-only --engine qwen122b
@@ -145,7 +146,7 @@ fully clarified.
 
 | Path | Purpose |
 |---|---|
-| `sebas` | Main CLI entrypoint for engine, demo, doctor, and benchmark commands |
+| `sebas` | Main CLI entrypoint for chat, engine, demo, doctor, and benchmark commands |
 | `rust/` | Minimal Sebas runner CLI |
 | `.workspace.example/` | Example local engine manifest; copy to `.workspace/` for local runs |
 | `docs/qwen122b-runbook.md` | Public 122B setup and benchmark runbook |
@@ -162,7 +163,7 @@ Working today:
 
 - Qwen3.5-122B-A10B text-only inference path
 - MacBook Air 16 GB bring-up with measured prefill/decode numbers
-- `./sebas` CLI wrapper for local engine operation
+- `./sebas` local chat and CLI wrapper for engine operation
 - Qwen35B and Qwen122B engine selection paths
 - benchmark and doctor commands
 

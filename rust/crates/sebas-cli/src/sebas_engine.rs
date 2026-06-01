@@ -408,6 +408,27 @@ pub fn run_demo(
     tokens: &str,
     passthrough: &[String],
 ) -> Result<(), String> {
+    run_demo_inner(root_dir, runtime, prompt, tokens, passthrough, true)
+}
+
+pub fn run_chat_turn(
+    root_dir: &Path,
+    runtime: &EngineRuntime,
+    prompt: &str,
+    tokens: &str,
+    passthrough: &[String],
+) -> Result<(), String> {
+    run_demo_inner(root_dir, runtime, prompt, tokens, passthrough, false)
+}
+
+fn run_demo_inner(
+    root_dir: &Path,
+    runtime: &EngineRuntime,
+    prompt: &str,
+    tokens: &str,
+    passthrough: &[String],
+    show_header: bool,
+) -> Result<(), String> {
     let script = match runtime.engine {
         EngineKind::Qwen35b => root_dir
             .join("flash-moe-anemll-ios")
@@ -419,7 +440,9 @@ pub fn run_demo(
             .join("run_122b.sh"),
     };
     let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
-    print_demo_header(runtime);
+    if show_header {
+        print_demo_header(runtime);
+    }
     let mut child = Command::new(&script)
         .arg(&runtime.model_dir)
         .args(passthrough)

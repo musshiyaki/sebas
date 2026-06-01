@@ -103,4 +103,4 @@ esac
 
 echo
 echo "Try:"
-echo "  sebas --help"
+echo "  sebas"

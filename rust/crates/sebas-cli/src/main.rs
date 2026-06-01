@@ -2,14 +2,14 @@ mod sebas_engine;
 
 use std::env;
 use std::fs;
-use std::io;
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
 use crate::sebas_engine::{
     ensure_engine_ready, is_engine_running, load_runtime, print_engine_doctor, print_engine_status,
-    run_bench, run_demo, BenchOptions, EngineKind, EngineRuntime,
+    run_bench, run_chat_turn, run_demo, BenchOptions, EngineKind, EngineRuntime,
 };
 
 const PRIMARY_BINARY_NAME: &str = "sebas";
@@ -19,6 +19,12 @@ const DEFAULT_ENGINE: EngineKind = EngineKind::Qwen122b;
 struct DemoArgs {
     engine: EngineKind,
     prompt: String,
+    tokens: String,
+    passthrough: Vec<String>,
+}
+
+struct ChatArgs {
+    engine: EngineKind,
     tokens: String,
     passthrough: Vec<String>,
 }
@@ -33,7 +39,11 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     let Some(command) = args.first().map(String::as_str) else {
-        println!("{}", render_launcher()?);
+        if should_start_chat()? {
+            handle_chat_command(&[])?;
+        } else {
+            println!("{}", render_launcher()?);
+        }
         return Ok(());
     };
 
@@ -43,6 +53,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "engine" => handle_engine_command(&args[1..])?,
         "doctor" => handle_doctor_shortcut(&args[1..])?,
         "bench" => handle_bench_shortcut(&args[1..])?,
+        "chat" => handle_chat_command(&args[1..])?,
         "demo" => handle_demo_command(&args[1..])?,
         "run" if args.get(1).map(String::as_str) == Some("engine-only") => {
             handle_engine_only_command(&args[2..])?;
@@ -155,6 +166,44 @@ fn handle_demo_command(args: &[String]) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
+fn handle_chat_command(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let chat = parse_chat_args(args)?;
+    let root = workspace_root()?;
+    let runtime = load_runtime(&root, chat.engine).map_err(io::Error::other)?;
+
+    println!("Sebas local chat");
+    println!("Model: {}", runtime.model_id());
+    println!("Runtime: SSD-streamed MoE experts");
+    println!("Type /quit to exit.");
+    println!();
+
+    let stdin = io::stdin();
+    let mut input = String::new();
+    loop {
+        print!("sebas> ");
+        io::stdout().flush()?;
+        input.clear();
+        let bytes = stdin.read_line(&mut input)?;
+        if bytes == 0 {
+            println!();
+            break;
+        }
+        let prompt = input.trim();
+        if prompt.is_empty() {
+            continue;
+        }
+        if matches!(prompt, "/quit" | "/exit" | "quit" | "exit") {
+            break;
+        }
+
+        run_chat_turn(&root, &runtime, prompt, &chat.tokens, &chat.passthrough)
+            .map_err(io::Error::other)?;
+        println!();
+    }
+
+    Ok(())
+}
+
 fn resolve_engine_runtime(
     args: &[String],
     default_engine: Option<EngineKind>,
@@ -228,6 +277,50 @@ fn parse_demo_args(args: &[String]) -> Result<DemoArgs, Box<dyn std::error::Erro
     Ok(DemoArgs {
         engine: engine.unwrap_or(read_project_default_engine()?.unwrap_or(DEFAULT_ENGINE)),
         prompt,
+        tokens,
+        passthrough,
+    })
+}
+
+fn parse_chat_args(args: &[String]) -> Result<ChatArgs, Box<dyn std::error::Error>> {
+    let (explicit_engine, stripped) = extract_engine_arg(args).map_err(io::Error::other)?;
+    let mut engine = explicit_engine;
+    let mut tokens = "128".to_string();
+    let mut passthrough = Vec::new();
+    let mut index = 0;
+
+    while index < stripped.len() {
+        match stripped[index].as_str() {
+            "--tokens" => {
+                tokens.clone_from(
+                    stripped
+                        .get(index + 1)
+                        .ok_or_else(|| io::Error::other("missing value for --tokens"))?,
+                );
+                validate_positive_integer(&tokens, "--tokens")?;
+                index += 2;
+            }
+            flag if flag.starts_with("--tokens=") => {
+                tokens = flag["--tokens=".len()..].to_string();
+                validate_positive_integer(&tokens, "--tokens")?;
+                index += 1;
+            }
+            "--" => {
+                passthrough.extend(stripped[index + 1..].iter().cloned());
+                break;
+            }
+            value if engine.is_none() => {
+                engine = Some(EngineKind::parse(value).map_err(io::Error::other)?);
+                index += 1;
+            }
+            other => {
+                return Err(io::Error::other(format!("unknown chat option: {other}")).into());
+            }
+        }
+    }
+
+    Ok(ChatArgs {
+        engine: engine.unwrap_or(read_project_default_engine()?.unwrap_or(DEFAULT_ENGINE)),
         tokens,
         passthrough,
     })
@@ -424,6 +517,7 @@ fn render_launcher() -> Result<String, Box<dyn std::error::Error>> {
     lines.extend([
         String::new(),
         "Try:".to_string(),
+        "  sebas chat".to_string(),
         "  sebas demo --tokens 96 \"Explain why running 122B locally on a 16GB MacBook Air is surprising.\"".to_string(),
         "  sebas bench qwen122b --lang all --case short".to_string(),
         "  sebas doctor qwen122b".to_string(),
@@ -432,6 +526,16 @@ fn render_launcher() -> Result<String, Box<dyn std::error::Error>> {
     ]);
 
     Ok(lines.join("\n"))
+}
+
+fn should_start_chat() -> Result<bool, Box<dyn std::error::Error>> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Ok(false);
+    }
+    Ok(workspace_root()?
+        .join(".workspace")
+        .join("manifest.json")
+        .is_file())
 }
 
 fn initialize_workspace() -> Result<String, Box<dyn std::error::Error>> {
@@ -618,6 +722,10 @@ fn print_help() {
 sebas {VERSION}
 
 Usage:
+  sebas
+      Start local chat when run from a configured Sebas workspace
+  sebas chat [--engine <qwen35b|qwen122b>] [--tokens N]
+      Start an interactive local chat loop
   sebas engine <start|doctor|status|bench> [--engine <qwen35b|qwen122b>]
       Manage the local Flash-MoE inference engine
   sebas demo [--engine <qwen35b|qwen122b>] [--tokens N] [PROMPT...]
@@ -638,6 +746,8 @@ Usage:
   sebas --version
 
 Examples:
+  sebas
+  sebas chat --tokens 128
   sebas init
   sebas engine doctor --engine qwen122b
   sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
