@@ -14,6 +14,12 @@ Qwen3.5 MoE model that does not fit a standard resident-model runtime. The
 optional Rust CLI/agent layer makes that engine usable for local coding, search,
 and experimentation.
 
+## Demo
+
+https://example.invalid/removed-for-privacy
+
+Direct-camera run of Qwen3.5-122B-A10B on a 16 GB MacBook Air.
+
 ## Install
 
 Install the latest prebuilt Sebas CLI:
