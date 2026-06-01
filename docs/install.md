@@ -33,13 +33,13 @@ Supported release assets:
 ## Install A Specific Version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh -s -- --version v0.1.1
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh -s -- --version v0.1.2
 ```
 
 You can also set the version with an environment variable:
 
 ```bash
-SEBAS_VERSION=v0.1.1 sh -c "$(curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh)"
+SEBAS_VERSION=v0.1.2 sh -c "$(curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh)"
 ```
 
 ## Source Build Fallback

@@ -12,19 +12,10 @@ It is intentionally conservative:
 
 ### `rust/`
 
-- Sebas includes an optional Rust code-agent runtime and API/tooling layer
-- This layer incorporates work from the UltraWorkers Claw Code lineage:
-  [`ultraworkers/claw-code`](https://github.com/ultraworkers/claw-code) and the
-  archived historical repository
-  [`ultraworkers/claw-code-parity`](https://github.com/ultraworkers/claw-code-parity)
-- The current `ultraworkers/claw-code` repository exposes an MIT license
-- The archived `ultraworkers/claw-code-parity` repository did not expose a
-  GitHub-detected license at the time of review; keep this attribution and
-  re-check provenance before redistributing this runtime independently
-- Sebas-specific changes are offered under the root MIT license where the
-  authors have the right to license them
-- Sebas does not claim ownership of upstream Anthropic or Claude Code source
-  material, and is not affiliated with Anthropic
+- Sebas includes a small Rust CLI wrapper for engine, demo, doctor, benchmark,
+  and local configuration commands
+- The previous experimental runtime layer was removed from the tracked workspace
+- Sebas-specific Rust code is offered under the root MIT license
 
 ### `flash-moe/`
 
@@ -72,14 +63,6 @@ It is intentionally conservative:
 - `docs/assets/social-preview.svg` and `docs/assets/social-preview.png` are
   project preview assets created for Sebas
 
-### `project-docs/ollama-web-search-mcp/`
-
-- Local MCP server built on `@modelcontextprotocol/sdk` and `zod`
-- Direct dependencies in `package.json`: `@modelcontextprotocol/sdk@^1.0.0` and `zod@^4.1.12`
-- `package-lock.json` records the transitive dependency tree and bundled license metadata
-- The current lockfile scan shows MIT, BSD-3-Clause, BSD-2-Clause, and ISC licenses in the dependency graph
-- If this component is redistributed independently, include the dependency notices that apply to the installed npm packages
-
 ### `project-docs/`
 
 - Contains experiments, prompts, notes, and supporting materials
@@ -95,8 +78,8 @@ It is intentionally conservative:
 ## Trademarks and Affiliation
 
 Sebas is an independent research project. It is not affiliated with, endorsed
-by, or maintained by OpenAI, Anthropic, Apple, Alibaba/Qwen, ANEMLL, Hugging
-Face, the MLX Community, or any other third-party project named here.
-Third-party names, model identifiers, product names, and repository names are
-used only for descriptive compatibility, attribution, setup, and benchmark
+by, or maintained by Apple, Alibaba/Qwen, ANEMLL, Hugging Face, the MLX
+Community, Flash-MoE upstream projects, or any other third-party project named
+here. Third-party names, model identifiers, product names, and repository names
+are used only for descriptive compatibility, attribution, setup, and benchmark
 context.

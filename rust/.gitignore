@@ -1,7 +1,1 @@
 target/
-.omx/
-.clawd-agents/
-.claude/sessions/
-.clawd-todos.json
-.sandbox-home/
-.omc/

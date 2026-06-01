@@ -1,19 +1,14 @@
 .DS_Store
 .qwen/
+.sebas/
 .workspace/
-.claw/sessions/
-.claw/settings.json
-.codex/sessions/
-.claw/settings.local.json
 *.orig
 rust/target/
 
 # Keep the embedded repos out of the umbrella repo.
 flash-moe/
 flash-moe-anemll-ios/
-qwen-code/
 
 # Local/generated assets.
 project-docs/*.png
-project-docs/ollama-web-search-mcp/node_modules/
 benchmarks/qwen122b/generated/

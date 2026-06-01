@@ -9,10 +9,10 @@
 Run Qwen3.5-122B-A10B locally on a 16 GB MacBook Air by streaming MoE expert
 weights from SSD instead of trying to keep the whole model resident in memory.
 
-Sebas has two layers. The core is an Apple Silicon inference engine for a
-Qwen3.5 MoE model that does not fit a standard resident-model runtime. The
-optional Rust CLI/agent layer makes that engine usable for local coding, search,
-and experimentation.
+Sebas is focused on one thing: a local Apple Silicon inference path for a
+Qwen3.5 MoE model that does not fit a standard resident-model runtime. The Rust
+CLI is a thin operational wrapper for setup, demo, doctor, and benchmark
+commands.
 
 ## Demo
 
@@ -92,8 +92,8 @@ require a GGUF overlay. It needs Qwen3.5 MoE-aware preparation before inference:
 - stream active expert blocks from SSD with `pread`
 - drive custom C, Objective-C, and Metal kernels with that layout
 
-That custom engine is the reason Sebas exists. The CLI/agent runtime is a
-convenience layer around the engine, not the premise of the project.
+That custom engine is the reason Sebas exists. The CLI is intentionally just an
+operational wrapper around the engine and benchmark workflow.
 
 ## Source Checkout
 
@@ -145,17 +145,14 @@ fully clarified.
 
 | Path | Purpose |
 |---|---|
-| `sebas` | Main CLI entrypoint for engine commands and optional agent workflow |
-| `rust/` | Optional Sebas agent runtime, TUI, tool execution, config, sessions |
+| `sebas` | Main CLI entrypoint for engine, demo, doctor, and benchmark commands |
+| `rust/` | Minimal Sebas runner CLI |
 | `.workspace.example/` | Example local engine manifest; copy to `.workspace/` for local runs |
 | `docs/qwen122b-runbook.md` | Public 122B setup and benchmark runbook |
 | `docs/qwen122b-porting.md` | Public 122B architecture and measurement notes |
 | `tools/` | Thin operational wrappers |
 | `docs/` | Workspace architecture notes |
 | `engines/` | External engine ownership and layout notes |
-
-Legacy compatibility aliases may exist in local builds, but `sebas` is the
-supported public entrypoint.
 
 ## Current Status
 
@@ -166,7 +163,6 @@ Working today:
 - Qwen3.5-122B-A10B text-only inference path
 - MacBook Air 16 GB bring-up with measured prefill/decode numbers
 - `./sebas` CLI wrapper for local engine operation
-- optional Rust code-first agent runtime and tool surface
 - Qwen35B and Qwen122B engine selection paths
 - benchmark and doctor commands
 
@@ -176,24 +172,7 @@ Still experimental:
 - fast mode / malloc-backed expert cache stability
 - arbitrary MoE model support beyond the Qwen3.5 shape family
 - vision tensors
-- prebuilt releases and package-manager installers
-
-## Optional Agent Runtime
-
-Sebas also includes a Rust implementation of a code-first AI coding runtime.
-This layer is optional for the 122B proof point. It is intended to make the
-local Qwen engine usable from a developer workflow instead of remaining only an
-inference demo.
-
-```bash
-cd rust
-cargo build --release
-
-./target/release/sebas
-./target/release/sebas "explain the current diff"
-```
-
-See [rust/README.md](rust/README.md) for runtime details.
+- package-manager installers
 
 ## Background
 
@@ -216,7 +195,7 @@ Related docs:
 - The 122B path is currently text-only.
 - The first-token experience is still slow compared with small local models.
 - Model preparation is large and technical.
-- The runtime currently targets Qwen3.5 MoE family assumptions.
+- The engine currently targets Qwen3.5 MoE family assumptions.
 - Reproducibility depends on Apple Silicon hardware, local SSD behavior, and the
   prepared model layout.
 
@@ -227,9 +206,9 @@ pretending it is magically lightweight.
 ## Affiliation
 
 Sebas is an independent research project. It is not affiliated with, endorsed
-by, or maintained by OpenAI, Anthropic, Apple, Alibaba/Qwen, ANEMLL, Hugging
-Face, or the MLX Community. Third-party names are used only for descriptive
-compatibility, attribution, and benchmark context.
+by, or maintained by Apple, Alibaba/Qwen, ANEMLL, Hugging Face, the MLX
+Community, or the Flash-MoE upstream projects. Third-party names are used only
+for descriptive compatibility, attribution, setup, and benchmark context.
 
 ## License
 

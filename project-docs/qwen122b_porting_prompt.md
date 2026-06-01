@@ -1,7 +1,7 @@
 # Porting Prompt: Port `flash-moe` to `Qwen3.5-122B-A10B` on Apple Silicon
 
 ## Role
-You are acting as a careful, autonomous engineering agent working on a local Apple Silicon MacBook Air environment.
+You are acting as a careful, autonomous engineering assistant working on a local Apple Silicon MacBook Air environment.
 Your mission is to adapt the existing `flash-moe` approach so that **`Qwen3.5-122B-A10B` can run as a text-only model on Apple Silicon using the `flash-moe` codebase**, with **correctness prioritized over speed**.
 
 You may reference and compare both of these upstream sources:

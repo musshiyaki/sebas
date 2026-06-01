@@ -6,7 +6,7 @@
       "inferBin": "flash-moe-anemll-ios/metal_infer/infer",
       "modelDirEnv": "MODEL_DIR",
       "defaultModelDir": "~/Models/flash_moe_qwen3.5_122b_4bit",
-      "portEnv": "QWEN122B_OPENAI_PORT",
+      "portEnv": "QWEN122B_HTTP_PORT",
       "defaultPort": 61234,
       "prefillBatchEnv": "QWEN122B_PREFILL_BATCH",
       "defaultPrefillBatch": 32,
@@ -15,9 +15,9 @@
       "kvQuantEnv": "QWEN122B_KV_QUANT",
       "defaultKvQuant": "none",
       "healthPath": "/health",
-      "pidFile": "qwen122b_openai_server.pid",
-      "stdoutLog": "qwen122b_openai_server.stdout.log",
-      "stderrLog": "qwen122b_openai_server.stderr.log",
+      "pidFile": "qwen122b_http_server.pid",
+      "stdoutLog": "qwen122b_http_server.stdout.log",
+      "stderrLog": "qwen122b_http_server.stderr.log",
       "serveArgs": [
         "--cache-io-split",
         "2",
@@ -34,7 +34,7 @@
       "inferBin": "flash-moe-anemll-ios/metal_infer/infer",
       "modelDirEnv": "MODEL_DIR",
       "defaultModelDir": "~/Models/flash_moe_qwen3.5_35b_a3b_4bit",
-      "portEnv": "QWEN35B_OPENAI_PORT",
+      "portEnv": "QWEN35B_HTTP_PORT",
       "defaultPort": 61235,
       "prefillBatchEnv": "QWEN35B_PREFILL_BATCH",
       "defaultPrefillBatch": 32,
@@ -43,9 +43,9 @@
       "kvQuantEnv": "QWEN35B_KV_QUANT",
       "defaultKvQuant": "none",
       "healthPath": "/health",
-      "pidFile": "qwen35b_openai_server.pid",
-      "stdoutLog": "qwen35b_openai_server.stdout.log",
-      "stderrLog": "qwen35b_openai_server.stderr.log",
+      "pidFile": "qwen35b_http_server.pid",
+      "stdoutLog": "qwen35b_http_server.stdout.log",
+      "stderrLog": "qwen35b_http_server.stderr.log",
       "serveArgs": [
         "--cache-io-split",
         "2",
@@ -66,17 +66,17 @@
     "local-122b": {
       "kind": "qwen-with-engine",
       "engine": "qwen122b",
-      "description": "Starts the local 122B OpenAI-compatible engine and launches a client against it."
+      "description": "Starts the local 122B engine for Sebas."
     },
     "local-35b": {
       "kind": "qwen-with-engine",
       "engine": "qwen35b",
-      "description": "Starts the local 35B-A3B OpenAI-compatible engine and launches a client against it."
+      "description": "Starts the local 35B-A3B engine for Sebas."
     },
     "engine-only": {
       "kind": "engine-only",
       "defaultEngine": "qwen122b",
-      "description": "Starts a local OpenAI-compatible engine without launching a client."
+      "description": "Starts a local Sebas engine without running a demo."
     }
   }
 }

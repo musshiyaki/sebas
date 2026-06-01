@@ -83,21 +83,12 @@ pub struct BenchOptions {
 }
 
 impl EngineRuntime {
-    pub fn health_url(&self) -> String {
-        format!("http://127.0.0.1:{}{}", self.port, self.health_path)
-    }
-
-    pub fn openai_base_url(&self) -> String {
+    pub fn http_base_url(&self) -> String {
         format!("http://127.0.0.1:{}/v1", self.port)
     }
 
     pub fn model_id(&self) -> String {
         infer_model_id_from_path(&self.model_dir)
-    }
-
-    pub fn export_env(&self) {
-        env::set_var("OPENAI_API_KEY", env::var("OPENAI_API_KEY").unwrap_or_else(|_| "dummy".to_string()));
-        env::set_var("OPENAI_BASE_URL", self.openai_base_url());
     }
 }
 
@@ -105,8 +96,8 @@ pub fn load_runtime(root_dir: &Path, engine: EngineKind) -> Result<EngineRuntime
     let manifest_path = root_dir.join(".workspace").join("manifest.json");
     let manifest = fs::read_to_string(&manifest_path)
         .map_err(|error| format!("failed to read {}: {error}", manifest_path.display()))?;
-    let json: Value =
-        serde_json::from_str(&manifest).map_err(|error| format!("invalid manifest JSON: {error}"))?;
+    let json: Value = serde_json::from_str(&manifest)
+        .map_err(|error| format!("invalid manifest JSON: {error}"))?;
 
     let engines = json
         .get("engines")
@@ -121,29 +112,34 @@ pub fn load_runtime(root_dir: &Path, engine: EngineKind) -> Result<EngineRuntime
     let infer_bin = root_dir.join(required_string(entry, "inferBin")?);
     let model_dir_env = required_string(entry, "modelDirEnv")?;
     let model_dir = expand_home(
-        env::var(&model_dir_env)
+        env::var(model_dir_env)
             .ok()
             .as_deref()
             .unwrap_or(required_string(entry, "defaultModelDir")?),
     );
     let port_env = required_string(entry, "portEnv")?;
-    let port = env::var(&port_env)
+    let port = env::var(port_env)
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(required_u16(entry, "defaultPort")?);
     let prefill_batch_env = required_string(entry, "prefillBatchEnv")?;
-    let prefill_batch = env::var(&prefill_batch_env)
-        .unwrap_or_else(|_| required_u64(entry, "defaultPrefillBatch").unwrap_or(0).to_string());
+    let prefill_batch = env::var(prefill_batch_env).unwrap_or_else(|_| {
+        required_u64(entry, "defaultPrefillBatch")
+            .unwrap_or(0)
+            .to_string()
+    });
     let think_budget_env = required_string(entry, "thinkBudgetEnv")?;
-    let think_budget = env::var(&think_budget_env)
-        .unwrap_or_else(|_| required_u64(entry, "defaultThinkBudget").unwrap_or(0).to_string());
+    let think_budget = env::var(think_budget_env).unwrap_or_else(|_| {
+        required_u64(entry, "defaultThinkBudget")
+            .unwrap_or(0)
+            .to_string()
+    });
     let kv_quant_env = required_string(entry, "kvQuantEnv")?;
-    let kv_quant = env::var(&kv_quant_env)
-        .unwrap_or_else(|_| {
-            required_string(entry, "defaultKvQuant")
-                .unwrap_or("none")
-                .to_string()
-        });
+    let kv_quant = env::var(kv_quant_env).unwrap_or_else(|_| {
+        required_string(entry, "defaultKvQuant")
+            .unwrap_or("none")
+            .to_string()
+    });
     let values = [
         ("MODEL_DIR", model_dir.display().to_string()),
         ("PORT", port.to_string()),
@@ -153,9 +149,7 @@ pub fn load_runtime(root_dir: &Path, engine: EngineKind) -> Result<EngineRuntime
     ];
 
     let health_path = required_string(entry, "healthPath")?.to_string();
-    let tmp_dir = env::var_os("TMPDIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/tmp"));
+    let tmp_dir = env::var_os("TMPDIR").map_or_else(|| PathBuf::from("/tmp"), PathBuf::from);
 
     Ok(EngineRuntime {
         engine,
@@ -186,7 +180,12 @@ pub fn ensure_engine_ready(runtime: &EngineRuntime) -> Result<(), String> {
             .args(&runtime.validate_args)
             .current_dir(&runtime.repo_path)
             .status()
-            .map_err(|error| format!("failed to validate {}: {error}", runtime.engine.as_cli_label()))?;
+            .map_err(|error| {
+                format!(
+                    "failed to validate {}: {error}",
+                    runtime.engine.as_cli_label()
+                )
+            })?;
         if !status.success() {
             return Err(format!(
                 "engine validation failed for {}",
@@ -265,10 +264,16 @@ pub fn ensure_engine_ready(runtime: &EngineRuntime) -> Result<(), String> {
 pub fn print_engine_doctor(runtime: &EngineRuntime) -> Result<(), String> {
     let mut failures = Vec::new();
     if !runtime.infer_bin.exists() {
-        failures.push(format!("missing infer binary: {}", runtime.infer_bin.display()));
+        failures.push(format!(
+            "missing infer binary: {}",
+            runtime.infer_bin.display()
+        ));
     }
     if !runtime.model_dir.is_dir() {
-        failures.push(format!("missing model dir: {}", runtime.model_dir.display()));
+        failures.push(format!(
+            "missing model dir: {}",
+            runtime.model_dir.display()
+        ));
     }
 
     if failures.is_empty() {
@@ -284,7 +289,10 @@ pub fn print_engine_doctor(runtime: &EngineRuntime) -> Result<(), String> {
     for failure in failures {
         println!("FAIL  {}: {}", runtime.engine.as_cli_label(), failure);
     }
-    Err(format!("doctor failed for {}", runtime.engine.as_cli_label()))
+    Err(format!(
+        "doctor failed for {}",
+        runtime.engine.as_cli_label()
+    ))
 }
 
 pub fn print_engine_status(runtime: &EngineRuntime) {
@@ -294,7 +302,7 @@ pub fn print_engine_status(runtime: &EngineRuntime) {
         runtime.engine.as_cli_label(),
         if running { "running" } else { "stopped" },
         runtime.model_dir.display(),
-        runtime.openai_base_url(),
+        runtime.http_base_url(),
         runtime.model_id(),
         runtime.pid_file.display(),
         runtime.stdout_log.display(),
@@ -333,13 +341,22 @@ fn run_bench_once(
     passthrough: &[String],
 ) -> Result<(), String> {
     let script = match runtime.engine {
-        EngineKind::Qwen35b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("bench_35b.sh"),
-        EngineKind::Qwen122b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("bench_122b.sh"),
+        EngineKind::Qwen35b => root_dir
+            .join("flash-moe-anemll-ios")
+            .join("scripts")
+            .join("bench_35b.sh"),
+        EngineKind::Qwen122b => root_dir
+            .join("flash-moe-anemll-ios")
+            .join("scripts")
+            .join("bench_122b.sh"),
     };
     println!("== language suite: {lang} ==");
     let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
     let mut command = Command::new(&script);
-    command.arg(&runtime.model_dir).args(passthrough).current_dir(infer_dir);
+    command
+        .arg(&runtime.model_dir)
+        .args(passthrough)
+        .current_dir(infer_dir);
     if let Some(case) = options.case.as_deref() {
         command.env("BENCH_CASE", case);
     }
@@ -373,7 +390,10 @@ fn run_bench_once(
     if status.success() {
         Ok(())
     } else {
-        Err(format!("bench failed for {}", runtime.engine.as_cli_label()))
+        Err(format!(
+            "bench failed for {}",
+            runtime.engine.as_cli_label()
+        ))
     }
 }
 
@@ -385,8 +405,14 @@ pub fn run_demo(
     passthrough: &[String],
 ) -> Result<(), String> {
     let script = match runtime.engine {
-        EngineKind::Qwen35b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("run_35b.sh"),
-        EngineKind::Qwen122b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("run_122b.sh"),
+        EngineKind::Qwen35b => root_dir
+            .join("flash-moe-anemll-ios")
+            .join("scripts")
+            .join("run_35b.sh"),
+        EngineKind::Qwen122b => root_dir
+            .join("flash-moe-anemll-ios")
+            .join("scripts")
+            .join("run_122b.sh"),
     };
     let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
     print_demo_header(runtime);
@@ -449,14 +475,17 @@ fn demo_hardware_label() -> String {
     let machine = env_value("SEBAS_DEMO_MACHINE")
         .or_else(mac_model_name)
         .unwrap_or_else(|| "Mac".to_string());
-    let chip = sysctl_value("machdep.cpu.brand_string").unwrap_or_else(|| "Apple Silicon".to_string());
+    let chip =
+        sysctl_value("machdep.cpu.brand_string").unwrap_or_else(|| "Apple Silicon".to_string());
     let memory = sysctl_value("hw.memsize")
         .and_then(|value| value.parse::<u64>().ok())
-        .map(|bytes| {
-            let gib = ((bytes as f64) / 1024.0 / 1024.0 / 1024.0).round() as u64;
-            format!("{gib} GB")
-        })
-        .unwrap_or_else(|| "16 GB".to_string());
+        .map_or_else(
+            || "16 GB".to_string(),
+            |bytes| {
+                let gib = (bytes + (1024 * 1024 * 512)) / (1024 * 1024 * 1024);
+                format!("{gib} GB")
+            },
+        );
 
     format!("{machine}, {chip}, {memory}")
 }
@@ -511,7 +540,10 @@ fn should_suppress_demo_stderr(line: &str) -> bool {
         || trimmed.starts_with("Tokens (")
 }
 
-fn required_string<'a>(object: &'a serde_json::Map<String, Value>, key: &str) -> Result<&'a str, String> {
+fn required_string<'a>(
+    object: &'a serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<&'a str, String> {
     object
         .get(key)
         .and_then(Value::as_str)
@@ -568,14 +600,13 @@ fn interpolate_args(args: Vec<String>, values: &[(&str, String)]) -> Vec<String>
 
 fn expand_home(value: &str) -> PathBuf {
     if value == "~" {
-        return env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(value));
+        return env::var_os("HOME").map_or_else(|| PathBuf::from(value), PathBuf::from);
     }
     if let Some(rest) = value.strip_prefix("~/") {
-        return env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join(rest))
-            .unwrap_or_else(|| PathBuf::from(value));
+        return env::var_os("HOME").map_or_else(
+            || PathBuf::from(value),
+            |home| PathBuf::from(home).join(rest),
+        );
     }
     PathBuf::from(value)
 }
@@ -583,10 +614,16 @@ fn expand_home(value: &str) -> PathBuf {
 fn validate_runtime_paths(runtime: &EngineRuntime) -> Result<(), String> {
     let mut failures = Vec::new();
     if !runtime.infer_bin.exists() {
-        failures.push(format!("missing infer binary: {}", runtime.infer_bin.display()));
+        failures.push(format!(
+            "missing infer binary: {}",
+            runtime.infer_bin.display()
+        ));
     }
     if !runtime.model_dir.is_dir() {
-        failures.push(format!("missing model dir: {}", runtime.model_dir.display()));
+        failures.push(format!(
+            "missing model dir: {}",
+            runtime.model_dir.display()
+        ));
     }
     if failures.is_empty() {
         Ok(())
