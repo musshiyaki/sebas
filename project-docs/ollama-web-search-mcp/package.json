@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Local MCP server exposing Ollama web_search to Claude Code",
+  "description": "Local MCP server exposing Ollama web_search to coding agents",
   "scripts": {
     "start": "node server.mjs"
   },

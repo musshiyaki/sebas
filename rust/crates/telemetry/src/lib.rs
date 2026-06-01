@@ -10,9 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 pub const DEFAULT_ANTHROPIC_VERSION: &str = "2023-06-01";
-pub const DEFAULT_APP_NAME: &str = "claude-code";
+pub const DEFAULT_APP_NAME: &str = "sebas";
 pub const DEFAULT_RUNTIME: &str = "rust";
-pub const DEFAULT_AGENTIC_BETA: &str = "claude-code-20250219";
 pub const DEFAULT_PROMPT_CACHING_SCOPE_BETA: &str = "prompt-caching-scope-2026-01-05";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,10 +65,7 @@ impl AnthropicRequestProfile {
         Self {
             anthropic_version: DEFAULT_ANTHROPIC_VERSION.to_string(),
             client_identity,
-            betas: vec![
-                DEFAULT_AGENTIC_BETA.to_string(),
-                DEFAULT_PROMPT_CACHING_SCOPE_BETA.to_string(),
-            ],
+            betas: vec![DEFAULT_PROMPT_CACHING_SCOPE_BETA.to_string()],
             extra_body: Map::new(),
         }
     }
@@ -434,7 +430,7 @@ mod tests {
     #[test]
     fn request_profile_emits_headers_and_merges_body() {
         let profile = AnthropicRequestProfile::new(
-            ClientIdentity::new("claude-code", "1.2.3").with_runtime("rust-cli"),
+            ClientIdentity::new("sebas", "1.2.3").with_runtime("rust-cli"),
         )
         .with_beta("tools-2026-04-01")
         .with_extra_body("metadata", serde_json::json!({"source": "test"}));
@@ -446,10 +442,10 @@ mod tests {
                     "anthropic-version".to_string(),
                     DEFAULT_ANTHROPIC_VERSION.to_string()
                 ),
-                ("user-agent".to_string(), "claude-code/1.2.3".to_string()),
+                ("user-agent".to_string(), "sebas/1.2.3".to_string()),
                 (
                     "anthropic-beta".to_string(),
-                    "claude-code-20250219,prompt-caching-scope-2026-01-05,tools-2026-04-01"
+                    "prompt-caching-scope-2026-01-05,tools-2026-04-01"
                         .to_string(),
                 ),
             ]
@@ -464,11 +460,7 @@ mod tests {
         );
         assert_eq!(
             body["betas"],
-            serde_json::json!([
-                "claude-code-20250219",
-                "prompt-caching-scope-2026-01-05",
-                "tools-2026-04-01"
-            ])
+            serde_json::json!(["prompt-caching-scope-2026-01-05", "tools-2026-04-01"])
         );
     }
 

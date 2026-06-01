@@ -192,24 +192,6 @@ fn command_in(cwd: &Path) -> Command {
     command
 }
 
-#[test]
-fn codex_binary_remains_a_compatible_alias() {
-    let temp_dir = unique_temp_dir("codex-alias");
-    fs::create_dir_all(&temp_dir).expect("temp dir should exist");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_codex"))
-        .current_dir(&temp_dir)
-        .arg("status")
-        .output()
-        .expect("codex alias should launch");
-
-    assert_success(&output);
-    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Status"));
-
-    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
-}
-
 fn write_session(root: &Path, label: &str) -> PathBuf {
     let session_path = root.join(format!("{label}.jsonl"));
     let mut session = Session::new();

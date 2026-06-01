@@ -12,10 +12,19 @@ It is intentionally conservative:
 
 ### `rust/`
 
-- Upstream base: [`ultraworkers/claw-code-parity`](https://github.com/ultraworkers/claw-code-parity)
-- Sebas の新しい agent/runtime/CLI 層は、この upstream parity 実装をベースに取り込んだ Rust workspace の上で構築している
-- Upstream license and notice requirements should be checked against the imported upstream tree before redistribution
-- If additional Sebas-specific patches are copied elsewhere, keep the upstream attribution with those files
+- Sebas includes an optional Rust code-agent runtime and API/tooling layer
+- This layer incorporates work from the UltraWorkers Claw Code lineage:
+  [`ultraworkers/claw-code`](https://github.com/ultraworkers/claw-code) and the
+  archived historical repository
+  [`ultraworkers/claw-code-parity`](https://github.com/ultraworkers/claw-code-parity)
+- The current `ultraworkers/claw-code` repository exposes an MIT license
+- The archived `ultraworkers/claw-code-parity` repository did not expose a
+  GitHub-detected license at the time of review; keep this attribution and
+  re-check provenance before redistributing this runtime independently
+- Sebas-specific changes are offered under the root MIT license where the
+  authors have the right to license them
+- Sebas does not claim ownership of upstream Anthropic or Claude Code source
+  material, and is not affiliated with Anthropic
 
 ### `flash-moe/`
 
@@ -53,6 +62,15 @@ It is intentionally conservative:
   `Qwen/Qwen3.5-122B-A10B`
 - Sebas records benchmark metadata and local preparation notes, but does not
   redistribute MLX model weights or prepared expert files
+
+### Demo media and preview assets
+
+- `docs/assets/sebas-demo-running.gif` is cropped direct-camera footage created
+  by the Sebas maintainer for this repository
+- The GIF is included only as public project demo media; it does not include
+  model weights, external source code, or third-party video footage
+- `docs/assets/social-preview.svg` and `docs/assets/social-preview.png` are
+  project preview assets created for Sebas
 
 ### `project-docs/ollama-web-search-mcp/`
 

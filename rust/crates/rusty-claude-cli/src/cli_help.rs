@@ -45,9 +45,9 @@ pub fn print_help_to(
     writeln!(out, "      Run a lightweight direct local-model demo prompt")?;
     writeln!(
         out,
-        "  {primary_binary_name} config [env|hooks|model|mcp|plugins|codex|import-qwen]"
+        "  {primary_binary_name} config [env|hooks|model|mcp|plugins|sebas|import-qwen]"
     )?;
-    writeln!(out, "      Inspect or migrate Codex configuration")?;
+    writeln!(out, "      Inspect or migrate Sebas configuration")?;
     writeln!(out, "  {primary_binary_name} search <query>")?;
     writeln!(out, "      Run built-in web search immediately")?;
     writeln!(out, "  {primary_binary_name} model set <qwen35b|qwen122b>")?;

@@ -2,7 +2,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub const PRIMARY_CLI_NAME: &str = "sebas";
-pub const CLI_ALIASES: &[&str] = &["codex"];
+pub const CLI_ALIASES: &[&str] = &[];
 pub const CANONICAL_STATE_DIR: &str = ".codex";
 pub const LEGACY_STATE_DIR: &str = ".claw";
 pub const COMPAT_STATE_DIR: &str = ".claude";

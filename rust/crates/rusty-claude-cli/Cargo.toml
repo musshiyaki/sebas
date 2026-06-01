@@ -6,10 +6,6 @@ license.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "codex"
-path = "src/main.rs"
-
-[[bin]]
 name = "sebas"
 path = "src/main.rs"
 

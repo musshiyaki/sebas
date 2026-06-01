@@ -107,7 +107,7 @@ fn default_engine_kind() -> Result<EngineKind, std::io::Error> {
 fn main() {
     if let Err(error) = run() {
         let message = error.to_string();
-        if message.contains("`codex --help`") || message.contains("`sebas --help`") {
+        if message.contains("`sebas --help`") {
             eprintln!("error: {message}");
         } else {
             eprintln!("error: {message}\n\nRun `{} --help` for usage.", PRIMARY_BINARY_NAME);
@@ -3294,7 +3294,7 @@ fn render_config_report(section: Option<&str>) -> Result<String, Box<dyn std::er
             "plugins" => runtime_config
                 .get("plugins")
                 .or_else(|| runtime_config.get("enabledPlugins")),
-            "sebas" | "codex" => runtime_config.get("sebas"),
+            "sebas" => runtime_config.get("sebas"),
             other => {
                 lines.push(format!(
                     "  Unsupported config section '{other}'. Use env, hooks, model, mcp, plugins, or sebas."

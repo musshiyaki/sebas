@@ -1,4 +1,4 @@
-# Codex Prompt: Port `flash-moe` to `Qwen3.5-122B-A10B` on Apple Silicon
+# Porting Prompt: Port `flash-moe` to `Qwen3.5-122B-A10B` on Apple Silicon
 
 ## Role
 You are acting as a careful, autonomous engineering agent working on a local Apple Silicon MacBook Air environment.
