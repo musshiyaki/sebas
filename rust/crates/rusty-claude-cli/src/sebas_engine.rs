@@ -13,6 +13,7 @@ use serde_json::Value;
 
 const HEALTH_POLL_ATTEMPTS: usize = 240;
 const HEALTH_POLL_DELAY: Duration = Duration::from_millis(250);
+const DEMO_SYSTEM_PROMPT: &str = "You are Sebas, a local AI demo running on this Mac through a 122B 4-bit MoE model. Answer in Japanese. Do not claim you were made by Google, OpenAI, or another lab unless explicitly asked about model provenance.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineKind {
@@ -294,6 +295,37 @@ pub fn run_bench(root_dir: &Path, engine: EngineKind, passthrough: &[String]) ->
         Ok(())
     } else {
         Err(format!("bench failed for {}", engine.as_cli_label()))
+    }
+}
+
+pub fn run_demo(
+    root_dir: &Path,
+    runtime: &EngineRuntime,
+    prompt: &str,
+    tokens: &str,
+    passthrough: &[String],
+) -> Result<(), String> {
+    let script = match runtime.engine {
+        EngineKind::Qwen35b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("run_35b.sh"),
+        EngineKind::Qwen122b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("run_122b.sh"),
+    };
+    let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
+    let status = Command::new(&script)
+        .arg(&runtime.model_dir)
+        .args(passthrough)
+        .current_dir(infer_dir)
+        .env(
+            "SYSTEM_PROMPT",
+            env::var("SYSTEM_PROMPT").unwrap_or_else(|_| DEMO_SYSTEM_PROMPT.to_string()),
+        )
+        .env("PROMPT", prompt)
+        .env("TOKENS", tokens)
+        .status()
+        .map_err(|error| format!("failed to run {}: {error}", script.display()))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("demo failed for {}", runtime.engine.as_cli_label()))
     }
 }
 

@@ -60,6 +60,7 @@ use tools::{
 
 use crate::sebas_engine::{
     ensure_engine_ready, load_runtime, print_engine_doctor, print_engine_status, run_bench,
+    run_demo,
     EngineKind, EngineRuntime,
 };
 use managed_sessions::{
@@ -496,6 +497,58 @@ fn resolve_engine_runtime(
     Ok((runtime, remaining))
 }
 
+fn parse_demo_args(
+    args: &[String],
+) -> Result<(EngineKind, String, String, Vec<String>), Box<dyn std::error::Error>> {
+    let (explicit_engine, stripped) = extract_engine_arg(args).map_err(std::io::Error::other)?;
+    let mut engine = explicit_engine;
+    let mut tokens = "64".to_string();
+    let mut prompt_parts = Vec::new();
+    let mut passthrough = Vec::new();
+    let mut index = 0;
+
+    while index < stripped.len() {
+        match stripped[index].as_str() {
+            "--tokens" => {
+                tokens = stripped
+                    .get(index + 1)
+                    .ok_or_else(|| std::io::Error::other("missing value for --tokens"))?
+                    .clone();
+                index += 2;
+            }
+            flag if flag.starts_with("--tokens=") => {
+                tokens = flag["--tokens=".len()..].to_string();
+                index += 1;
+            }
+            "--" => {
+                passthrough.extend(stripped[index + 1..].iter().cloned());
+                break;
+            }
+            value if engine.is_none() => {
+                if let Ok(parsed) = EngineKind::parse(value) {
+                    engine = Some(parsed);
+                    index += 1;
+                } else {
+                    prompt_parts.push(value.to_string());
+                    index += 1;
+                }
+            }
+            value => {
+                prompt_parts.push(value.to_string());
+                index += 1;
+            }
+        }
+    }
+
+    let prompt = if prompt_parts.is_empty() {
+        "日本語で、思考過程は出力せず、2文で自己紹介してください。".to_string()
+    } else {
+        prompt_parts.join(" ")
+    };
+
+    Ok((engine.unwrap_or(default_engine_kind()?), prompt, tokens, passthrough))
+}
+
 fn try_handle_sebas_direct_commands(
     args: &[String],
 ) -> Result<bool, Box<dyn std::error::Error>> {
@@ -577,6 +630,13 @@ fn try_handle_sebas_direct_commands(
             let (sub_args, passthrough) = split_passthrough_args(range);
             let (runtime, _) = resolve_engine_runtime(&sub_args, default_engine)?;
             run_bench(&workspace_root()?, runtime.engine, &passthrough)
+                .map_err(std::io::Error::other)?;
+            Ok(true)
+        }
+        "demo" => {
+            let (engine, prompt, tokens, passthrough) = parse_demo_args(&args[1..])?;
+            let runtime = load_runtime(&workspace_root()?, engine).map_err(std::io::Error::other)?;
+            run_demo(&workspace_root()?, &runtime, &prompt, &tokens, &passthrough)
                 .map_err(std::io::Error::other)?;
             Ok(true)
         }
@@ -2146,12 +2206,12 @@ impl LiveCli {
         );
         format!(
             "\x1b[38;5;39m\
- ██████╗ ██████╗ ██████╗ ███████╗██╗  ██╗\n\
-██╔════╝██╔═══██╗██╔══██╗██╔════╝╚██╗██╔╝\n\
-██║     ██║   ██║██║  ██║█████╗   ╚███╔╝ \n\
-██║     ██║   ██║██║  ██║██╔══╝   ██╔██╗ \n\
-╚██████╗╚██████╔╝██████╔╝███████╗██╔╝ ██╗\n\
- ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝\x1b[0m \x1b[38;5;81mCodex\x1b[0m\n\n\
+███████╗███████╗██████╗  █████╗ ███████╗\n\
+██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝\n\
+███████╗█████╗  ██████╔╝███████║███████╗\n\
+╚════██║██╔══╝  ██╔══██╗██╔══██║╚════██║\n\
+███████║███████╗██████╔╝██║  ██║███████║\n\
+╚══════╝╚══════╝╚═════╝ ╚═╝  ╚═╝╚══════╝\x1b[0m \x1b[38;5;81mSebas\x1b[0m\n\n\
   \x1b[2mModel\x1b[0m            {}\n\
   \x1b[2mPermissions\x1b[0m      {}\n\
   \x1b[2mBranch\x1b[0m           {}\n\

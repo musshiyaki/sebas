@@ -41,6 +41,8 @@ pub fn print_help_to(
         "  {primary_binary_name} engine <start|doctor|status|bench> --engine <qwen35b|qwen122b>"
     )?;
     writeln!(out, "      Manage local OpenAI-compatible inference engines")?;
+    writeln!(out, "  {primary_binary_name} demo [PROMPT...]")?;
+    writeln!(out, "      Run a lightweight direct local-model demo prompt")?;
     writeln!(
         out,
         "  {primary_binary_name} config [env|hooks|model|mcp|plugins|codex|import-qwen]"
@@ -127,6 +129,7 @@ pub fn print_help_to(
     writeln!(out, "  {primary_binary_name}")?;
     writeln!(out, "  {primary_binary_name} \"explain src/main.rs\"")?;
     writeln!(out, "  {primary_binary_name} engine doctor --engine qwen122b")?;
+    writeln!(out, "  {primary_binary_name} demo --tokens 32 \"こんにちは。短く自己紹介して\"")?;
     writeln!(out, "  {primary_binary_name} search \"today's japan headlines\"")?;
     writeln!(out, "  {primary_binary_name} model set qwen122b")?;
     writeln!(out, "  {primary_binary_name} config import-qwen")?;
