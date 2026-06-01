@@ -92,6 +92,10 @@ impl EngineRuntime {
     }
 }
 
+pub fn is_engine_running(runtime: &EngineRuntime) -> bool {
+    health_check(runtime.port, &runtime.health_path)
+}
+
 pub fn load_runtime(root_dir: &Path, engine: EngineKind) -> Result<EngineRuntime, String> {
     let manifest_path = root_dir.join(".workspace").join("manifest.json");
     let manifest = fs::read_to_string(&manifest_path)

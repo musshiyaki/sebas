@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use crate::sebas_engine::{
-    ensure_engine_ready, load_runtime, print_engine_doctor, print_engine_status, run_bench,
-    run_demo, BenchOptions, EngineKind, EngineRuntime,
+    ensure_engine_ready, is_engine_running, load_runtime, print_engine_doctor, print_engine_status,
+    run_bench, run_demo, BenchOptions, EngineKind, EngineRuntime,
 };
 
 const PRIMARY_BINARY_NAME: &str = "sebas";
@@ -33,7 +33,7 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     let Some(command) = args.first().map(String::as_str) else {
-        print_help();
+        println!("{}", render_launcher()?);
         return Ok(());
     };
 
@@ -380,6 +380,56 @@ fn render_config_report() -> Result<String, Box<dyn std::error::Error>> {
             }
         }
     }
+
+    Ok(lines.join("\n"))
+}
+
+fn render_launcher() -> Result<String, Box<dyn std::error::Error>> {
+    let root = workspace_root()?;
+    let manifest = root.join(".workspace").join("manifest.json");
+    let default_engine = read_project_default_engine()?.unwrap_or(DEFAULT_ENGINE);
+    let mut lines = vec![
+        format!("Sebas {VERSION}"),
+        "Local 122B-class model runner for Apple Silicon".to_string(),
+        String::new(),
+        format!("Default engine   {}", default_engine.as_cli_label()),
+        format!("Workspace        {}", root.display()),
+    ];
+
+    if manifest.is_file() {
+        match load_runtime(&root, default_engine) {
+            Ok(runtime) => {
+                lines.push(format!("Model            {}", runtime.model_id()));
+                lines.push(format!(
+                    "Status           {}",
+                    if is_engine_running(&runtime) {
+                        "running"
+                    } else {
+                        "stopped"
+                    }
+                ));
+                lines.push(format!("Model dir        {}", runtime.model_dir.display()));
+                lines.push("Runtime          SSD-streamed MoE experts".to_string());
+            }
+            Err(error) => {
+                lines.push(format!("Config           {error}"));
+            }
+        }
+    } else {
+        lines.push(format!("Manifest         {} (missing)", manifest.display()));
+        lines
+            .push("Setup            run from a Sebas workspace or set SEBAS_WORKSPACE".to_string());
+    }
+
+    lines.extend([
+        String::new(),
+        "Try:".to_string(),
+        "  sebas demo --tokens 96 \"Explain why running 122B locally on a 16GB MacBook Air is surprising.\"".to_string(),
+        "  sebas bench qwen122b --lang all --case short".to_string(),
+        "  sebas doctor qwen122b".to_string(),
+        String::new(),
+        "Use `sebas --help` for all commands.".to_string(),
+    ]);
 
     Ok(lines.join("\n"))
 }
