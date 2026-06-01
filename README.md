@@ -138,7 +138,6 @@ are fully clarified.
 | Path | Purpose |
 |---|---|
 | `sebas` | Main CLI entrypoint for engine commands and optional agent workflow |
-| `codex` | Compatibility alias that launches the same Rust runtime |
 | `rust/` | Optional Sebas agent runtime, TUI, tool execution, config, sessions |
 | `.workspace.example/` | Example local engine manifest; copy to `.workspace/` for local runs |
 | `docs/qwen122b-runbook.md` | Public 122B setup and benchmark runbook |
@@ -146,6 +145,9 @@ are fully clarified.
 | `tools/` | Thin operational wrappers |
 | `docs/` | Workspace architecture notes |
 | `engines/` | External engine ownership and layout notes |
+
+Legacy compatibility aliases may exist in local builds, but `sebas` is the
+supported public entrypoint.
 
 ## Current Status
 
@@ -213,6 +215,13 @@ Related docs:
 Those limits are explicit because the interesting part of this project is the
 engineering constraint: making a huge local model work on small hardware without
 pretending it is magically lightweight.
+
+## Affiliation
+
+Sebas is an independent research project. It is not affiliated with, endorsed
+by, or maintained by OpenAI, Anthropic, Apple, Alibaba/Qwen, ANEMLL, Hugging
+Face, or the MLX Community. Third-party names are used only for descriptive
+compatibility, attribution, and benchmark context.
 
 ## License
 

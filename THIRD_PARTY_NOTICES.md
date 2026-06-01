@@ -36,6 +36,24 @@ It is intentionally conservative:
 - The current GitHub page snapshot does not show a LICENSE file in the repository root
 - Treat reuse or redistribution as license-unclear until the upstream and fork-history terms are checked directly
 
+### Qwen model sources
+
+- Upstream model: [`Qwen/Qwen3.5-122B-A10B`](https://huggingface.co/Qwen/Qwen3.5-122B-A10B)
+- The upstream Hugging Face model page currently lists the license as Apache-2.0
+- Sebas does not redistribute the upstream model weights
+- Users are responsible for obtaining model assets from upstream sources and
+  following the license and terms that apply to those assets
+
+### MLX Community converted model
+
+- Converted model used for the current 122B proof point:
+  [`mlx-community/Qwen3.5-122B-A10B-4bit`](https://huggingface.co/mlx-community/Qwen3.5-122B-A10B-4bit)
+- The MLX Community Hugging Face model page currently lists the license as Apache-2.0
+- The model card states that it was converted to MLX format from
+  `Qwen/Qwen3.5-122B-A10B`
+- Sebas records benchmark metadata and local preparation notes, but does not
+  redistribute MLX model weights or prepared expert files
+
 ### `project-docs/ollama-web-search-mcp/`
 
 - Local MCP server built on `@modelcontextprotocol/sdk` and `zod`
@@ -55,3 +73,12 @@ It is intentionally conservative:
 - The Sebas workspace itself is distributed under the root [`LICENSE`](./LICENSE)
 - If a component has stronger or more specific upstream license terms, those terms take precedence for that component
 - This notice file is informational and does not replace the license text shipped with each component
+
+## Trademarks and Affiliation
+
+Sebas is an independent research project. It is not affiliated with, endorsed
+by, or maintained by OpenAI, Anthropic, Apple, Alibaba/Qwen, ANEMLL, Hugging
+Face, the MLX Community, or any other third-party project named here.
+Third-party names, model identifiers, product names, and repository names are
+used only for descriptive compatibility, attribution, setup, and benchmark
+context.

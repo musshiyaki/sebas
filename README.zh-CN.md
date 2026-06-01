@@ -112,7 +112,6 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 | Path | Purpose |
 |---|---|
 | `sebas` | engine commands 和 optional agent workflow 的 main CLI entrypoint |
-| `codex` | 启动同一个 Rust runtime 的 compatibility alias |
 | `rust/` | optional Sebas agent runtime、TUI、tool execution、config、sessions |
 | `.workspace.example/` | local engine manifest 示例；复制到 `.workspace/` 后使用 |
 | `docs/qwen122b-runbook.md` | public 122B setup and benchmark runbook |
@@ -120,6 +119,8 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 | `tools/` | thin operational wrappers |
 | `docs/` | workspace architecture notes |
 | `engines/` | external engine ownership and layout notes |
+
+local build 可能仍包含 legacy compatibility alias，但公开支持的入口是 `sebas`。
 
 ## 当前状态
 
@@ -179,6 +180,10 @@ runtime 细节见 [rust/README.md](rust/README.md)。
 - 可复现性依赖 Apple Silicon hardware、local SSD behavior 和 prepared model layout。
 
 这些限制之所以明确写出来，是因为这个项目有趣的地方不是假装巨大模型“神奇地变轻了”，而是在小硬件上让巨大 local model 真实跑起来的工程约束。
+
+## 关系说明
+
+Sebas 是一个独立 research project，并不隶属于、获得背书于或由 OpenAI、Anthropic、Apple、Alibaba/Qwen、ANEMLL、Hugging Face 或 MLX Community 维护。第三方名称仅用于说明 compatibility、attribution 和 benchmark context。
 
 ## License
 

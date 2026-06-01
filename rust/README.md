@@ -1,6 +1,6 @@
 # Sebas Rust Runtime
 
-Sebas / Codex 互換の Rust 実装です。利用者向けの正規 CLI は `sebas`、`codex` は互換 alias として残します。
+Sebas の Rust runtime 実装です。利用者向けの正規 CLI は `sebas` です。legacy compatibility alias が存在する場合がありますが、Sebas は OpenAI、Anthropic、またはそれらの製品とは提携・承認・保守関係にありません。
 
 ## Quick Start
 
@@ -47,8 +47,8 @@ sebas login
 | Sub-agent orchestration | ✅ |
 | Todo tracking | ✅ |
 | Notebook editing | ✅ |
-| CLAUDE.md / project memory | ✅ |
-| Config file hierarchy (.codex + legacy compatibility) | ✅ |
+| Project memory file support | ✅ |
+| Legacy-compatible config hierarchy | ✅ |
 | Permission system | ✅ |
 | MCP server lifecycle | ✅ |
 | Session persistence + resume | ✅ |
@@ -107,7 +107,7 @@ Tab completion now expands not just slash command names, but also common workflo
 | `/model [name]` | Show or switch model |
 | `/permissions` | Show or switch permission mode |
 | `/config [section]` | Show config (env, hooks, model) |
-| `/memory` | Show CLAUDE.md contents |
+| `/memory` | Show project memory contents |
 | `/diff` | Show git diff |
 | `/export [path]` | Export conversation |
 | `/session [id]` | Resume a previous session |
@@ -124,7 +124,7 @@ rust/
     ├── commands/           # Shared slash-command registry
     ├── compat-harness/     # TS manifest extraction harness
     ├── runtime/            # Session, config, permissions, MCP, prompts
-    ├── rusty-claude-cli/   # Main CLI binaries (`sebas`, `codex`)
+    ├── rusty-claude-cli/   # Main CLI binary (`sebas`) and legacy-compatible entrypoints
     └── tools/              # Built-in tool implementations
 ```
 
@@ -141,7 +141,7 @@ rust/
 
 - **~43K lines** of Rust
 - **6 crates** in workspace
-- **Primary binary:** `sebas` (`codex` alias available)
+- **Primary binary:** `sebas`
 - **Default model:** `claude-opus-4-6`
 - **Default permissions:** `danger-full-access`
 

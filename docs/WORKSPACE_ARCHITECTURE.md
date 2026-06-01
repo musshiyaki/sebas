@@ -8,7 +8,6 @@ repository while preserving local engine checkouts as separate histories.
 ## Public Paths
 
 - `sebas`: shared CLI entrypoint
-- `codex`: compatibility alias for the same Rust runtime
 - `rust`: optional Sebas agent runtime, TUI, tool execution, config surface
 - `.workspace.example/manifest.json`: example local engine manifest
 - `docs/qwen122b-runbook.md`: public 122B setup and benchmark runbook
@@ -34,5 +33,6 @@ the umbrella repository:
   license and notice requirements are clarified.
 - The local runtime still supports ignored engine checkouts at the paths named
   in `.workspace/manifest.json`.
-- Canonical config / session / skill surface is `.codex/` and `$CODEX_HOME` /
-  `~/.codex/`.
+- The runtime still keeps a legacy-compatible config / session / skill layout
+  for existing users; public docs should present `sebas` as the supported
+  entrypoint.
