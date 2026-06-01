@@ -16,9 +16,10 @@ and experimentation.
 
 ## Demo
 
-https://example.invalid/removed-for-privacy
+![Sebas running Qwen3.5-122B-A10B locally](docs/assets/demo-removed-for-privacy.gif)
 
 Direct-camera run of Qwen3.5-122B-A10B on a 16 GB MacBook Air.
+[Watch the full direct-camera demo video](https://example.invalid/removed-for-privacy).
 
 ## Install
 
