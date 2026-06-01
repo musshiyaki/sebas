@@ -1,19 +1,56 @@
 # Installing Sebas
 
-Sebas can be installed from source today. Prebuilt GitHub Releases and package
-manager formulas are not published yet.
+Sebas can be installed from GitHub Releases when a prebuilt binary is available.
+If a release asset is missing for your platform, the installer falls back to a
+source build.
 
 ## Requirements
 
 - macOS or Linux
-- Rust toolchain with `cargo`
-- Git
+- `curl` or `wget`
 
 The CLI install does not download model weights or install the external
 Flash-MoE engine checkout. The 122B inference path still requires the local
 workspace setup in [qwen122b-runbook.md](qwen122b-runbook.md).
 
-## Install From Source
+## Install Latest Release
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh
+sebas --help
+```
+
+By default, the installer downloads a prebuilt binary for your platform and
+copies it to `~/.local/bin/sebas`.
+
+Supported release assets:
+
+- `sebas-aarch64-apple-darwin.tar.gz`
+- `sebas-x86_64-apple-darwin.tar.gz`
+- `sebas-aarch64-unknown-linux-gnu.tar.gz`
+- `sebas-x86_64-unknown-linux-gnu.tar.gz`
+
+## Install A Specific Version
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh -s -- --version v0.1.0
+```
+
+You can also set the version with an environment variable:
+
+```bash
+SEBAS_VERSION=v0.1.0 sh -c "$(curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh)"
+```
+
+## Source Build Fallback
+
+The installer falls back to a source build when a prebuilt release asset is not
+available. Source builds require:
+
+- Rust toolchain with `cargo`
+- Git
+
+To force a source build:
 
 ```bash
 git clone https://github.com/musshiyaki/sebas.git
@@ -22,8 +59,11 @@ tools/install-sebas
 sebas --help
 ```
 
-By default, the installer builds the release binary and copies it to
-`~/.local/bin/sebas`.
+Or:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh -s -- --from-source
+```
 
 If `~/.local/bin` is not on your `PATH`, add:
 
@@ -43,6 +83,13 @@ To reuse an already built binary:
 ```bash
 cargo build --release --manifest-path rust/Cargo.toml -p sebas-cli --bin sebas
 tools/install-sebas --no-build
+```
+
+The top-level `install.sh` accepts the same destination options:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh -s -- --prefix "$HOME/opt/sebas"
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh -s -- --bin-dir "$HOME/bin"
 ```
 
 ## Verify
@@ -70,3 +117,8 @@ rm -f "$HOME/.local/bin/sebas"
 ```
 
 Use the matching path if you installed with `--prefix` or `--bin-dir`.
+
+## Release Maintainers
+
+Prebuilt CLI assets are produced by `.github/workflows/release.yml` when a tag
+matching `v*` is pushed, or when the workflow is run manually with a tag input.

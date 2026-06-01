@@ -74,7 +74,14 @@ The public entrypoint is the top-level `./sebas` command.
 
 ## Install
 
-Sebas can be installed from source today:
+Install the latest prebuilt Sebas CLI:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh
+sebas --help
+```
+
+Or build from source:
 
 ```bash
 git clone https://github.com/musshiyaki/sebas.git
@@ -83,9 +90,9 @@ tools/install-sebas
 sebas --help
 ```
 
-The installer builds the Rust CLI and copies `sebas` to `~/.local/bin` by
-default. See [install.md](docs/install.md) for custom install paths and PATH
-setup.
+The installer copies `sebas` to `~/.local/bin` by default. See
+[install.md](docs/install.md) for release tags, custom install paths, PATH
+setup, and source-build fallback.
 
 This installs the CLI only. The 122B path still needs a prepared model and the
 external engine checkout described in [qwen122b-runbook.md](docs/qwen122b-runbook.md).

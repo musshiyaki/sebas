@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add "${{ matrix.target }}"
+
+      - name: Build Sebas
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build \
+            --locked \
+            --release \
+            --manifest-path rust/Cargo.toml \
+            -p sebas-cli \
+            --bin sebas \
+            --target "${{ matrix.target }}"
+
+      - name: Package asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="${{ matrix.target }}"
+          asset="sebas-${target}.tar.gz"
+          staging="dist/${target}"
+
+          mkdir -p "$staging"
+          cp "rust/target/${target}/release/sebas" "$staging/sebas"
+          chmod 0755 "$staging/sebas"
+          cp README.md LICENSE THIRD_PARTY_NOTICES.md "$staging/"
+          cp docs/install.md "$staging/INSTALL.md"
+
+          tar -czf "$asset" -C "$staging" .
+          if command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 "$asset" > "$asset.sha256"
+          else
+            sha256sum "$asset" > "$asset.sha256"
+          fi
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sebas-${{ matrix.target }}
+          path: |
+            sebas-${{ matrix.target }}.tar.gz
+            sebas-${{ matrix.target }}.tar.gz.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          ls -la
+
+          notes_file="$(mktemp)"
+          {
+            echo "Sebas ${TAG_NAME}"
+            echo
+            echo "Install with:"
+            echo
+            echo '```bash'
+            echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | sh"
+            echo '```'
+            echo
+            echo "This release publishes the Sebas CLI only. The 122B engine path still requires the external engine checkout and prepared model described in the repository docs."
+          } > "$notes_file"
+
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" ./* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG_NAME" ./* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Sebas ${TAG_NAME}" \
+              --notes-file "$notes_file" \
+              --target "$GITHUB_SHA"
+          fi
