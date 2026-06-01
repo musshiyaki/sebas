@@ -15,7 +15,7 @@ const HEALTH_POLL_ATTEMPTS: usize = 240;
 const HEALTH_POLL_DELAY: Duration = Duration::from_millis(250);
 const DEMO_SYSTEM_PROMPT: &str = "\
 You are Sebas, a local AI demo running on this Mac with a 122B 4-bit MoE model. \
-Reply in the user's language, stay concise, and finish within the token budget. \
+Reply in the same language as the user's prompt, stay concise, and finish within the token budget. \
 Do not claim a maker unless asked.";
 const BENCH_SHORT_PROMPT_EN: &str =
     "In English, without showing your reasoning, introduce yourself in two short sentences.";
@@ -389,6 +389,7 @@ pub fn run_demo(
         EngineKind::Qwen122b => root_dir.join("flash-moe-anemll-ios").join("scripts").join("run_122b.sh"),
     };
     let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
+    print_demo_header(runtime);
     let mut child = Command::new(&script)
         .arg(&runtime.model_dir)
         .args(passthrough)
@@ -422,6 +423,83 @@ pub fn run_demo(
         Ok(())
     } else {
         Err(format!("demo failed for {}", runtime.engine.as_cli_label()))
+    }
+}
+
+fn print_demo_header(runtime: &EngineRuntime) {
+    println!("Model: {}", demo_model_label(runtime));
+    println!("Hardware: {}", demo_hardware_label());
+    println!("Runtime: SSD-streamed MoE experts");
+    println!();
+    let _ = std::io::stdout().flush();
+}
+
+fn demo_model_label(runtime: &EngineRuntime) -> &'static str {
+    match runtime.engine {
+        EngineKind::Qwen35b => "Qwen3.5-35B-A3B 4-bit",
+        EngineKind::Qwen122b => "Qwen3.5-122B-A10B 4-bit",
+    }
+}
+
+fn demo_hardware_label() -> String {
+    if let Some(label) = env_value("SEBAS_DEMO_HARDWARE") {
+        return label;
+    }
+
+    let machine = env_value("SEBAS_DEMO_MACHINE")
+        .or_else(mac_model_name)
+        .unwrap_or_else(|| "Mac".to_string());
+    let chip = sysctl_value("machdep.cpu.brand_string").unwrap_or_else(|| "Apple Silicon".to_string());
+    let memory = sysctl_value("hw.memsize")
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(|bytes| {
+            let gib = ((bytes as f64) / 1024.0 / 1024.0 / 1024.0).round() as u64;
+            format!("{gib} GB")
+        })
+        .unwrap_or_else(|| "16 GB".to_string());
+
+    format!("{machine}, {chip}, {memory}")
+}
+
+fn env_value(name: &str) -> Option<String> {
+    let value = env::var(name).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn mac_model_name() -> Option<String> {
+    let output = Command::new("system_profiler")
+        .arg("SPHardwareDataType")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8(output.stdout).ok()?;
+    value.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix("Model Name:")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn sysctl_value(name: &str) -> Option<String> {
+    let output = Command::new("sysctl").arg("-n").arg(name).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8(output.stdout).ok()?;
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
     }
 }
 
