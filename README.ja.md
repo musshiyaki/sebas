@@ -92,6 +92,14 @@ sebas --help
 
 ## ローカル engine setup
 
+Sebas は Flash-MoE engine code を同梱・再配布しません。互換性のある外部
+engine checkout を使う場合は、利用前に upstream repository と license status
+を自分で確認してください。
+
+```bash
+git clone https://github.com/Anemll/flash-moe flash-moe-anemll-ios
+```
+
 local engine commands を使うには、まず local workspace manifest を作成します。
 
 ```bash

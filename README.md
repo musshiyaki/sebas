@@ -114,6 +114,14 @@ sebas --help
 
 ## Local Engine Setup
 
+Sebas does not vendor or redistribute Flash-MoE engine code. If you choose to
+use a compatible external engine checkout, review the upstream repository and
+its license status yourself before use:
+
+```bash
+git clone https://github.com/Anemll/flash-moe flash-moe-anemll-ios
+```
+
 For local engine commands, create a local workspace manifest first:
 
 ```bash
@@ -130,8 +138,8 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 For a full 122B setup from the source MLX model, see
 [qwen122b-runbook.md](docs/qwen122b-runbook.md). The current public umbrella
 repo tracks the Sebas CLI and documentation. The Flash-MoE engine checkout is
-kept outside the tracked tree until redistribution and upstream license terms
-are fully clarified.
+kept outside the tracked tree until redistribution and upstream license terms are
+fully clarified.
 
 ## What This Repository Contains
 

@@ -92,6 +92,13 @@ sebas --help
 
 ## 本地 engine setup
 
+Sebas 不会 vendor 或重新分发 Flash-MoE engine code。如果你选择使用兼容的外部
+engine checkout，请先自行检查 upstream repository 及其 license status。
+
+```bash
+git clone https://github.com/Anemll/flash-moe flash-moe-anemll-ios
+```
+
 使用 local engine commands 前，先创建 local workspace manifest：
 
 ```bash

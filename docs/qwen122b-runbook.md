@@ -14,6 +14,13 @@ when reproducing the 122B path locally.
 That boundary is intentional until redistribution and upstream license terms
 are fully clarified. See [Third-party notices](../THIRD_PARTY_NOTICES.md).
 
+If you choose to use a compatible external engine checkout, review the upstream
+repository and its license status yourself before use:
+
+```bash
+git clone https://github.com/Anemll/flash-moe flash-moe-anemll-ios
+```
+
 ## Hardware And Disk
 
 Measured target:
