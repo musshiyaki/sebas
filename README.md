@@ -1,5 +1,9 @@
 # Sebas
 
+[![Latest release](https://img.shields.io/github/v/release/musshiyaki/sebas?sort=semver)](https://github.com/musshiyaki/sebas/releases/latest)
+[![Install](https://img.shields.io/badge/install-curl%20%7C%20sh-2ea44f)](#install)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Run Qwen3.5-122B-A10B locally on a 16 GB MacBook Air by streaming MoE expert
 weights from SSD instead of trying to keep the whole model resident in memory.
 
@@ -8,9 +12,25 @@ Qwen3.5 MoE model that does not fit a standard resident-model runtime. The
 optional Rust CLI/agent layer makes that engine usable for local coding, search,
 and experimentation.
 
-![Sebas social preview](docs/assets/social-preview.png)
+## Install
+
+Install the latest prebuilt Sebas CLI:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh
+sebas --help
+```
+
+The installer copies `sebas` to `~/.local/bin` by default. See
+[install.md](docs/install.md) for release tags, custom install paths, PATH
+setup, and source-build fallback.
+
+This installs the CLI only. The 122B path still needs a prepared model and the
+external engine checkout described in [qwen122b-runbook.md](docs/qwen122b-runbook.md).
 
 ## Current Proof Point
+
+![Sebas social preview](docs/assets/social-preview.png)
 
 Measured on a `MacBook Air (Apple M5, 16 GB)` with
 `mlx-community/Qwen3.5-122B-A10B-4bit` after full local preparation:
@@ -64,21 +84,12 @@ require a GGUF overlay. It needs Qwen3.5 MoE-aware preparation before inference:
 That custom engine is the reason Sebas exists. The CLI/agent runtime is a
 convenience layer around the engine, not the premise of the project.
 
-## Quick Start
+## Source Checkout
 
 The public entrypoint is the top-level `./sebas` command.
 
 ```bash
 ./sebas --help
-```
-
-## Install
-
-Install the latest prebuilt Sebas CLI:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/musshiyaki/sebas/main/install.sh | sh
-sebas --help
 ```
 
 Or build from source:
@@ -89,13 +100,6 @@ cd sebas
 tools/install-sebas
 sebas --help
 ```
-
-The installer copies `sebas` to `~/.local/bin` by default. See
-[install.md](docs/install.md) for release tags, custom install paths, PATH
-setup, and source-build fallback.
-
-This installs the CLI only. The 122B path still needs a prepared model and the
-external engine checkout described in [qwen122b-runbook.md](docs/qwen122b-runbook.md).
 
 ## Local Engine Setup
 
