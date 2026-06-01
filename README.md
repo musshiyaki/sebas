@@ -1,8 +1,7 @@
 # Sebas
 
-Run a 122B-class Qwen MoE model locally on a 16 GB MacBook Air by streaming
-expert weights from SSD instead of trying to keep the whole model resident in
-memory.
+Run Qwen3.5-122B-A10B locally on a 16 GB MacBook Air by streaming MoE expert
+weights from SSD instead of trying to keep the whole model resident in memory.
 
 Sebas has two layers. The core is an Apple Silicon inference engine for a
 Qwen3.5 MoE model that does not fit a standard resident-model runtime. The
@@ -23,9 +22,8 @@ Measured on a `MacBook Air (Apple M5, 16 GB)` with
 | Per-token timing trace | ~314.7 ms/token |
 
 The current bottleneck is expert weight movement from SSD, not Metal math
-throughput. See
-[PORTING_122B.md](flash-moe-anemll-ios/PORTING_122B.md) for the measured
-timing breakdown and architecture notes.
+throughput. See [qwen122b-porting.md](docs/qwen122b-porting.md) for the
+measured timing breakdown and architecture notes.
 
 ## Why This Works
 
@@ -61,31 +59,29 @@ convenience layer around the engine, not the premise of the project.
 
 ## Quick Start
 
-The main entrypoint is the top-level `./sebas` command.
+The public entrypoint is the top-level `./sebas` command.
 
 ```bash
 ./sebas --help
+```
+
+For local engine commands, create a local workspace manifest first:
+
+```bash
+mkdir -p .workspace
+cp .workspace.example/manifest.json .workspace/manifest.json
+cp .workspace.example/system-no-think.md .workspace/system-no-think.md
+
 ./sebas engine doctor --engine qwen122b
 ./sebas engine bench --engine qwen122b
 ./sebas run engine-only --engine qwen122b
 ```
 
-For a full setup from the source MLX model:
-
-```bash
-cd flash-moe-anemll-ios
-
-./scripts/setup_122b.sh
-source .venv/bin/activate
-
-MODEL_DIR="$HOME/Models/mlx-community-Qwen3.5-122B-A10B-4bit"
-OUT_DIR="$HOME/Models/flash_moe_qwen3.5_122b_4bit"
-
-./scripts/prepare_122b.sh "$MODEL_DIR" "$OUT_DIR"
-./scripts/bench_122b.sh "$OUT_DIR"
-```
-
-See [RUN_122B.md](flash-moe-anemll-ios/RUN_122B.md) for the full runbook.
+For a full 122B setup from the source MLX model, see
+[qwen122b-runbook.md](docs/qwen122b-runbook.md). The current public umbrella
+repo tracks the Sebas CLI and documentation. The Flash-MoE engine checkout is
+kept outside the tracked tree until redistribution and upstream license terms
+are fully clarified.
 
 ## What This Repository Contains
 
@@ -94,11 +90,12 @@ See [RUN_122B.md](flash-moe-anemll-ios/RUN_122B.md) for the full runbook.
 | `sebas` | Main CLI entrypoint for engine commands and optional agent workflow |
 | `codex` | Compatibility alias that launches the same Rust runtime |
 | `rust/` | Optional Sebas agent runtime, TUI, tool execution, config, sessions |
-| `flash-moe-anemll-ios/` | Main local inference engine and 122B bring-up work |
-| `flash-moe/` | Reference Flash-MoE implementation |
+| `.workspace.example/` | Example local engine manifest; copy to `.workspace/` for local runs |
+| `docs/qwen122b-runbook.md` | Public 122B setup and benchmark runbook |
+| `docs/qwen122b-porting.md` | Public 122B architecture and measurement notes |
 | `tools/` | Thin operational wrappers |
 | `docs/` | Workspace architecture notes |
-| `engines/` | Engine ownership and layout notes |
+| `engines/` | External engine ownership and layout notes |
 
 ## Current Status
 
@@ -146,9 +143,8 @@ Anemll fork extends that direction for Apple Silicon and the 122B Qwen3.5 path.
 
 Related docs:
 
-- [Qwen3.5-122B porting notes](flash-moe-anemll-ios/PORTING_122B.md)
-- [Qwen3.5-122B runbook](flash-moe-anemll-ios/RUN_122B.md)
-- [Flash-MoE engine README](flash-moe-anemll-ios/README.md)
+- [Qwen3.5-122B porting notes](docs/qwen122b-porting.md)
+- [Qwen3.5-122B runbook](docs/qwen122b-runbook.md)
 - [Workspace architecture](docs/WORKSPACE_ARCHITECTURE.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 

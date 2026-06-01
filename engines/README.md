@@ -1,8 +1,13 @@
 # Engines
 
-Sebas Project の中で、エンジン実体の正本は次の通りです。
+Sebas keeps the public CLI/orchestration surface separate from the external
+engine checkouts.
 
-- `flash-moe-anemll-ios`: 主開発対象のローカル推論エンジン
-- `flash-moe`: 参照実装
+- `flash-moe-anemll-ios`: primary local inference engine checkout for the 122B
+  Apple Silicon bring-up
+- `flash-moe`: reference implementation checkout
 
-上位 Sebas 層では、この区別を明示したまま起動導線だけ統一します。実体ディレクトリの大移動は、各サブリポジトリの履歴保全が済んだ段階で行います。
+These engine directories are intentionally ignored by the umbrella repository
+until redistribution and upstream license terms are clarified. For local runs,
+copy `.workspace.example/manifest.json` to `.workspace/manifest.json` and keep
+the engine checkout at the paths named in that manifest.

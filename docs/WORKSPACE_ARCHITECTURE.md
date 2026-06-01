@@ -2,19 +2,37 @@
 
 ## Intent
 
-Sebas Project は、実験用エンジン、IDE/CLI フロントエンド、補助スクリプトを別 Git 履歴のまま扱いながら、日常運用の入口だけを統一する。
+Sebas keeps the public CLI, docs, and orchestration surface in this umbrella
+repository while preserving local engine checkouts as separate histories.
 
-## Canonical Paths
+## Public Paths
 
-- `rust`: Sebas の agent runtime / TUI / tool execution / config surface
-- `flash-moe-anemll-ios`: 主開発対象の推論エンジン
-- `flash-moe`: 参照実装
-- `.workspace/manifest.json`: 上位ランタイム設定
-- `sebas`: Sebas 共通の code-first CLI
+- `sebas`: shared CLI entrypoint
+- `codex`: compatibility alias for the same Rust runtime
+- `rust`: optional Sebas agent runtime, TUI, tool execution, config surface
+- `.workspace.example/manifest.json`: example local engine manifest
+- `docs/qwen122b-runbook.md`: public 122B setup and benchmark runbook
+- `docs/qwen122b-porting.md`: public architecture and measurement notes
+- `engines/README.md`: policy for external engine checkout ownership
+
+## Local-Only Paths
+
+The following paths may exist in a working tree but are intentionally ignored by
+the umbrella repository:
+
+- `flash-moe-anemll-ios`: primary local inference engine checkout
+- `flash-moe`: reference engine checkout
+- `.workspace/manifest.json`: local runtime configuration copied from
+  `.workspace.example/manifest.json`
+- `.workspace/system-no-think.md`: local engine system prompt copied from
+  `.workspace.example/system-no-think.md`
 
 ## Current Policy
 
-- 利用者向けの正規導線は `sebas` と `apps/` 配下に寄せる
-- `flash-moe-anemll-ios` に未コミット作業がある前提で、上位 orchestration 層から先に整理する
-- canonical config / session / skill surface は `.codex/` と `$CODEX_HOME` / `~/.codex/`
-- `.claw/` と `.claude/` は compatibility read、`.qwen/` は import/migration 対象
+- The root README must only link to files tracked in the public umbrella repo.
+- Engine source redistribution stays out of the umbrella repo until upstream
+  license and notice requirements are clarified.
+- The local runtime still supports ignored engine checkouts at the paths named
+  in `.workspace/manifest.json`.
+- Canonical config / session / skill surface is `.codex/` and `$CODEX_HOME` /
+  `~/.codex/`.

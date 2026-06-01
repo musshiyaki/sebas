@@ -1,0 +1,82 @@
+{
+  "workspaceVersion": 1,
+  "engines": {
+    "qwen122b": {
+      "repoPath": "flash-moe-anemll-ios",
+      "inferBin": "flash-moe-anemll-ios/metal_infer/infer",
+      "modelDirEnv": "MODEL_DIR",
+      "defaultModelDir": "~/Models/flash_moe_qwen3.5_122b_4bit",
+      "portEnv": "QWEN122B_OPENAI_PORT",
+      "defaultPort": 61234,
+      "prefillBatchEnv": "QWEN122B_PREFILL_BATCH",
+      "defaultPrefillBatch": 32,
+      "thinkBudgetEnv": "QWEN122B_THINK_BUDGET",
+      "defaultThinkBudget": 0,
+      "kvQuantEnv": "QWEN122B_KV_QUANT",
+      "defaultKvQuant": "none",
+      "healthPath": "/health",
+      "pidFile": "qwen122b_openai_server.pid",
+      "stdoutLog": "qwen122b_openai_server.stdout.log",
+      "stderrLog": "qwen122b_openai_server.stderr.log",
+      "serveArgs": [
+        "--cache-io-split",
+        "2",
+        "--pfb",
+        "$PREFILL_BATCH",
+        "--prefill-experts-full-only",
+        "--think-budget",
+        "$THINK_BUDGET"
+      ],
+      "validateArgs": []
+    },
+    "qwen35b": {
+      "repoPath": "flash-moe-anemll-ios",
+      "inferBin": "flash-moe-anemll-ios/metal_infer/infer",
+      "modelDirEnv": "MODEL_DIR",
+      "defaultModelDir": "~/Models/flash_moe_qwen3.5_35b_a3b_4bit",
+      "portEnv": "QWEN35B_OPENAI_PORT",
+      "defaultPort": 61235,
+      "prefillBatchEnv": "QWEN35B_PREFILL_BATCH",
+      "defaultPrefillBatch": 32,
+      "thinkBudgetEnv": "QWEN35B_THINK_BUDGET",
+      "defaultThinkBudget": 0,
+      "kvQuantEnv": "QWEN35B_KV_QUANT",
+      "defaultKvQuant": "none",
+      "healthPath": "/health",
+      "pidFile": "qwen35b_openai_server.pid",
+      "stdoutLog": "qwen35b_openai_server.stdout.log",
+      "stderrLog": "qwen35b_openai_server.stderr.log",
+      "serveArgs": [
+        "--cache-io-split",
+        "2",
+        "--pfb",
+        "$PREFILL_BATCH",
+        "--prefill-experts-full-only",
+        "--think-budget",
+        "$THINK_BUDGET"
+      ],
+      "validateArgs": [
+        "--model",
+        "$MODEL_DIR",
+        "--validate-model"
+      ]
+    }
+  },
+  "profiles": {
+    "local-122b": {
+      "kind": "qwen-with-engine",
+      "engine": "qwen122b",
+      "description": "Starts the local 122B OpenAI-compatible engine and launches a client against it."
+    },
+    "local-35b": {
+      "kind": "qwen-with-engine",
+      "engine": "qwen35b",
+      "description": "Starts the local 35B-A3B OpenAI-compatible engine and launches a client against it."
+    },
+    "engine-only": {
+      "kind": "engine-only",
+      "defaultEngine": "qwen122b",
+      "description": "Starts a local OpenAI-compatible engine without launching a client."
+    }
+  }
+}
