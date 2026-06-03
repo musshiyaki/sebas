@@ -9,6 +9,7 @@
 Qwen3.5-122B-A10B を 16GB MacBook Air 上でローカル実行します。モデル全体をメモリに常駐させるのではなく、MoE の expert weight を SSD からオンデマンドにストリーミングします。
 
 Sebas は、標準的な常駐型ランタイムには収まりにくい Qwen3.5 MoE モデルを Apple Silicon で動かすためのローカル推論 path に集中しています。Rust CLI は local chat、demo、doctor、benchmark のための薄い operational wrapper です。
+実験的に、ローカルモデルを Codex CLI から Responses-compatible provider として使うための bridge も含みます。
 
 ## デモ
 
@@ -112,6 +113,9 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 ./sebas engine bench --engine qwen122b
 ./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
 ./sebas run engine-only --engine qwen122b
+./sebas codex config --engine qwen122b
+./sebas codex proxy --engine qwen122b
+./sebas codex proxy --engine qwen122b --one-shot-exec --session-mode delta
 ```
 
 source MLX model からの full 122B setup は [qwen122b-runbook.md](docs/qwen122b-runbook.md) を参照してください。現在の public umbrella repo は Sebas CLI と documentation を追跡しています。Flash-MoE engine checkout は、再配布と upstream license terms が十分に整理されるまで tracked tree の外に置いています。
@@ -125,6 +129,7 @@ source MLX model からの full 122B setup は [qwen122b-runbook.md](docs/qwen12
 | `.workspace.example/` | local engine manifest の例。`.workspace/` にコピーして使います |
 | `docs/qwen122b-runbook.md` | public 122B setup and benchmark runbook |
 | `docs/qwen122b-porting.md` | public 122B architecture and measurement notes |
+| `docs/codex-bridge.md` | experimental Codex CLI bridge setup |
 | `tools/` | thin operational wrappers |
 | `docs/` | workspace architecture notes |
 | `engines/` | external engine ownership and layout notes |
@@ -138,6 +143,7 @@ source MLX model からの full 122B setup は [qwen122b-runbook.md](docs/qwen12
 - Qwen3.5-122B-A10B text-only inference path
 - MacBook Air 16GB bring-up と prefill/decode の実測値
 - local chat と engine operation 用の `./sebas` CLI wrapper
+- local Responses API proxy 経由の experimental Codex CLI bridge
 - Qwen35B / Qwen122B engine selection paths
 - benchmark and doctor commands
 
@@ -158,6 +164,7 @@ source MLX model からの full 122B setup は [qwen122b-runbook.md](docs/qwen12
 - [Installing Sebas](docs/install.md)
 - [Qwen3.5-122B porting notes](docs/qwen122b-porting.md)
 - [Qwen3.5-122B runbook](docs/qwen122b-runbook.md)
+- [Codex CLI bridge](docs/codex-bridge.md)
 - [Reproducibility pack workflow](docs/qwen122b-repro-pack.md)
 - [Tracked benchmark summaries](benchmarks/qwen122b/)
 - [Workspace architecture](docs/WORKSPACE_ARCHITECTURE.md)

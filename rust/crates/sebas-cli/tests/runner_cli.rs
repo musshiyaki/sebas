@@ -37,12 +37,45 @@ fn help_describes_runner_surface_without_old_branding() {
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("sebas"));
     assert!(stdout.contains("sebas chat"));
+    assert!(stdout.contains("sebas codex <proxy|config|doctor>"));
+    assert!(stdout.contains("--agent-mode normal|one-shot-exec"));
+    assert!(stdout.contains("--session-mode none|delta"));
     assert!(stdout.contains("sebas engine <start|doctor|status|bench>"));
     assert!(stdout.contains("sebas demo"));
     assert!(stdout.contains("sebas model"));
     assert!(stdout.contains("local-model demo"));
     assert!(!stdout.contains("prompt mode"));
     assert!(!stdout.contains("repl"));
+}
+
+#[test]
+fn codex_config_prints_responses_profile() {
+    let temp_dir = unique_temp_dir("codex-config");
+    write_minimal_manifest(&temp_dir);
+
+    let output = command_in(&temp_dir)
+        .args([
+            "codex",
+            "config",
+            "--engine",
+            "qwen122b",
+            "--listen",
+            "127.0.0.1:61335",
+            "--max-tokens",
+            "256",
+        ])
+        .output()
+        .expect("sebas should launch");
+
+    assert_success(&output);
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("~/.codex/sebas-qwen122b.config.toml"));
+    assert!(stdout.contains("model_provider = \"sebas-qwen122b\""));
+    assert!(stdout.contains("base_url = \"http://127.0.0.1:61335/v1\""));
+    assert!(stdout.contains("wire_api = \"responses\""));
+    assert!(stdout.contains("model_max_output_tokens = 256"));
+
+    fs::remove_dir_all(temp_dir).expect("cleanup");
 }
 
 #[test]

@@ -1,0 +1,1392 @@
+#!/usr/bin/env python3
+"""Responses API bridge for using Sebas from Codex CLI.
+
+Codex CLI speaks the OpenAI Responses API. The local Flash-MoE engine currently
+speaks Chat Completions. This proxy translates requests in both directions and
+keeps the model-facing call non-streaming so the engine can finish extracting
+tool calls before Codex sees the response.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import threading
+import time
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+from urllib import error, request
+
+
+DEFAULT_LISTEN = "127.0.0.1:61334"
+DEFAULT_BACKEND = "http://127.0.0.1:61234/v1"
+DEFAULT_MODEL = "qwen3.5-122b-4bit"
+DEFAULT_MAX_TOKENS = 128
+DEFAULT_SYSTEM_TEXT_CHARS = 1400
+DEFAULT_USER_TEXT_CHARS = 5000
+DEFAULT_TOOL_DESCRIPTION_CHARS = 220
+DEFAULT_TOOL_MODE = "terminal"
+DEFAULT_CONTEXT_MODE = "compact"
+DEFAULT_AGENT_MODE = "normal"
+DEFAULT_SESSION_MODE = "none"
+DEFAULT_HEARTBEAT_SECONDS = 5.0
+DEFAULT_MALFORMED_LOG = "/tmp/sebas-codex-malformed.log"
+TERMINAL_TOOL_NAMES = {"exec_command"}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Sebas Codex CLI bridge")
+    parser.add_argument("--listen", default=os.getenv("SEBAS_CODEX_LISTEN", DEFAULT_LISTEN))
+    parser.add_argument("--backend", default=os.getenv("SEBAS_CODEX_BACKEND", DEFAULT_BACKEND))
+    parser.add_argument("--model", default=os.getenv("SEBAS_CODEX_MODEL", DEFAULT_MODEL))
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=int(os.getenv("SEBAS_CODEX_MAX_TOKENS", str(DEFAULT_MAX_TOKENS))),
+    )
+    parser.add_argument(
+        "--tool-mode",
+        choices=["terminal", "all"],
+        default=os.getenv("SEBAS_CODEX_TOOL_MODE", DEFAULT_TOOL_MODE),
+        help="terminal exposes only file/terminal editing tools; all exposes every Codex function tool",
+    )
+    parser.add_argument(
+        "--context-mode",
+        choices=["compact", "full"],
+        default=os.getenv("SEBAS_CODEX_CONTEXT_MODE", DEFAULT_CONTEXT_MODE),
+        help="compact drops verbose Codex runtime blocks for local latency",
+    )
+    parser.add_argument(
+        "--agent-mode",
+        choices=["normal", "one-shot-exec"],
+        default=os.getenv("SEBAS_CODEX_AGENT_MODE", DEFAULT_AGENT_MODE),
+        help="one-shot-exec biases each Codex turn toward a single exec_command call",
+    )
+    parser.add_argument(
+        "--session-mode",
+        choices=["none", "delta"],
+        default=os.getenv("SEBAS_CODEX_SESSION_MODE", DEFAULT_SESSION_MODE),
+        help="delta sends appended Codex input to engines that support Sebas session cache",
+    )
+    parser.add_argument(
+        "--heartbeat-seconds",
+        type=float,
+        default=float(os.getenv("SEBAS_CODEX_HEARTBEAT_SECONDS", str(DEFAULT_HEARTBEAT_SECONDS))),
+        help="send Responses SSE in_progress heartbeats while the local backend is prefilling",
+    )
+    parser.add_argument(
+        "--malformed-log",
+        default=os.getenv("SEBAS_CODEX_MALFORMED_LOG", DEFAULT_MALFORMED_LOG),
+        help="append malformed tool-call text here for debugging",
+    )
+    return parser.parse_args()
+
+
+class SebasCodexServer(ThreadingHTTPServer):
+    backend: str
+    model: str
+    max_tokens: int
+    tool_mode: str
+    context_mode: str
+    agent_mode: str
+    session_mode: str
+    heartbeat_seconds: float
+    malformed_log: str
+    session_states: dict[str, dict[str, Any]]
+    response_sessions: dict[str, str]
+
+
+class Handler(BaseHTTPRequestHandler):
+    server: SebasCodexServer
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        sys.stderr.write("[sebas-codex] " + fmt % args + "\n")
+
+    def do_GET(self) -> None:
+        if self.path in {"/health", "/v1/health"}:
+            self.send_json({"status": "ok", "backend": self.server.backend})
+            return
+        if self.path in {"/models", "/v1/models"}:
+            self.send_json(
+                {
+                    "object": "list",
+                    "data": [
+                        {
+                            "id": self.server.model,
+                            "object": "model",
+                            "owned_by": "sebas",
+                        }
+                    ],
+                }
+            )
+            return
+        self.send_json({"error": "not found"}, status=404)
+
+    def do_POST(self) -> None:
+        if self.path not in {"/responses", "/v1/responses"}:
+            self.send_json({"error": "not found"}, status=404)
+            return
+
+        payload: dict[str, Any] = {}
+        response_id = make_id("resp")
+        streaming = False
+        stream_open = False
+        request_id = make_id("req")
+        session_key = ""
+        started = time.monotonic()
+        try:
+            payload = self.read_json()
+            streaming = wants_stream(payload)
+            session_key = codex_session_key(
+                payload,
+                self.server.response_sessions,
+                self.client_address[0],
+            )
+            active_tool_results = active_tool_result_count(
+                payload,
+                self.server.session_mode,
+                self.server.session_states,
+                session_key,
+            )
+            self.log_message(
+                "%s received stream=%s input_items=%d codex_tools=%d tool_results=%d "
+                "active_tool_results=%d tool_mode=%s context_mode=%s agent_mode=%s session_mode=%s",
+                request_id,
+                streaming,
+                count_list(payload.get("input")),
+                count_list(payload.get("tools")),
+                count_tool_results(payload.get("input")),
+                active_tool_results,
+                self.server.tool_mode,
+                self.server.context_mode,
+                self.server.agent_mode,
+                self.server.session_mode,
+            )
+            if streaming:
+                self.send_sse_headers()
+                stream_open = True
+                self.emit_created(response_id)
+            chat_payload = responses_to_chat(
+                payload,
+                self.server.model,
+                self.server.max_tokens,
+                self.server.tool_mode,
+                self.server.context_mode,
+                self.server.agent_mode,
+                self.server.session_mode,
+                self.server.session_states,
+                session_key,
+                active_tool_results,
+            )
+            self.log_message(
+                "%s backend start messages=%d prompt_chars=%d tools=%s max_tokens=%d session_key=%s backend_session=%s",
+                request_id,
+                count_list(chat_payload.get("messages")),
+                prompt_chars(chat_payload.get("messages")) + len(str(chat_payload.get("sebas_prompt", ""))),
+                tool_names(chat_payload.get("tools", [])) or "none",
+                self.server.max_tokens,
+                session_key,
+                chat_payload.get("session_mode", "none"),
+            )
+            if streaming:
+                chat_response = self.post_chat_completion_with_heartbeats(
+                    request_id,
+                    response_id,
+                    chat_payload,
+                    started,
+                )
+            else:
+                chat_response = post_chat_completion(self.server.backend, chat_payload)
+            output_items = chat_to_response_items(chat_response, self.server.malformed_log)
+            output_items = apply_agent_output_policy(
+                output_items,
+                self.server.agent_mode,
+                active_tool_results,
+            )
+            remember_session_state(
+                self.server.session_mode,
+                self.server.session_states,
+                self.server.response_sessions,
+                session_key,
+                response_id,
+                payload,
+                output_items,
+            )
+            self.log_message(
+                "%s backend done elapsed=%.1fs output=%s",
+                request_id,
+                time.monotonic() - started,
+                output_summary(output_items),
+            )
+        except Exception as exc:  # noqa: BLE001 - send structured API error to Codex.
+            self.log_message(
+                "%s failed elapsed=%.1fs error=%s",
+                request_id,
+                time.monotonic() - started,
+                exc,
+            )
+            if streaming:
+                if not stream_open:
+                    self.send_sse_headers()
+                    self.emit_created(response_id)
+                self.emit_failed(response_id, str(exc))
+            else:
+                self.send_json({"error": str(exc)}, status=502)
+            return
+
+        if streaming:
+            for index, item in enumerate(output_items):
+                if item["type"] == "function_call":
+                    self.emit_function_call(index, item)
+                else:
+                    self.emit_message(index, item.get("text", ""))
+            self.emit_completed(response_id, output_items)
+        else:
+            self.send_json(response_object(response_id, self.server.model, "completed", output_items))
+
+    def post_chat_completion_with_heartbeats(
+        self,
+        request_id: str,
+        response_id: str,
+        chat_payload: dict[str, Any],
+        started: float,
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        done = threading.Event()
+
+        def worker() -> None:
+            try:
+                result["response"] = post_chat_completion(self.server.backend, chat_payload)
+            except Exception as exc:  # noqa: BLE001 - moved back to the request thread.
+                result["error"] = exc
+            finally:
+                done.set()
+
+        threading.Thread(target=worker, daemon=True).start()
+        heartbeat = max(float(getattr(self.server, "heartbeat_seconds", DEFAULT_HEARTBEAT_SECONDS)), 1.0)
+        heartbeat_count = 0
+        while not done.wait(heartbeat):
+            heartbeat_count += 1
+            elapsed = time.monotonic() - started
+            self.log_message(
+                "%s backend heartbeat count=%d elapsed=%.1fs",
+                request_id,
+                heartbeat_count,
+                elapsed,
+            )
+            self.emit_in_progress(response_id)
+
+        if "error" in result:
+            raise result["error"]
+        response = result.get("response")
+        if not isinstance(response, dict):
+            raise RuntimeError("backend returned no response")
+        return response
+
+    def read_json(self) -> dict[str, Any]:
+        length = int(self.headers.get("content-length", "0"))
+        body = self.rfile.read(length)
+        if not body:
+            return {}
+        return json.loads(body.decode("utf-8"))
+
+    def send_json(self, payload: dict[str, Any], status: int = 200) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_sse_headers(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+    def send_sse(self, event: str, payload: dict[str, Any]) -> None:
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self.wfile.write(f"event: {event}\n".encode("utf-8"))
+        for line in body.splitlines() or [""]:
+            self.wfile.write(f"data: {line}\n".encode("utf-8"))
+        self.wfile.write(b"\n")
+        self.wfile.flush()
+
+    def emit_created(self, response_id: str) -> None:
+        response = response_object(response_id, self.server.model, "in_progress", [])
+        self.send_sse(
+            "response.created",
+            {"type": "response.created", "response": response},
+        )
+
+    def emit_in_progress(self, response_id: str) -> None:
+        response = response_object(response_id, self.server.model, "in_progress", [])
+        self.send_sse(
+            "response.in_progress",
+            {"type": "response.in_progress", "response": response},
+        )
+
+    def emit_message(self, output_index: int, text: str) -> None:
+        item_id = make_id("msg")
+        added_item = {
+            "id": item_id,
+            "type": "message",
+            "status": "in_progress",
+            "role": "assistant",
+            "content": [],
+        }
+        part = {"type": "output_text", "text": text, "annotations": []}
+        done_item = {**added_item, "status": "completed", "content": [part]}
+        self.send_sse(
+            "response.output_item.added",
+            {"type": "response.output_item.added", "output_index": output_index, "item": added_item},
+        )
+        self.send_sse(
+            "response.content_part.added",
+            {
+                "type": "response.content_part.added",
+                "item_id": item_id,
+                "output_index": output_index,
+                "content_index": 0,
+                "part": {**part, "text": ""},
+            },
+        )
+        if text:
+            self.send_sse(
+                "response.output_text.delta",
+                {
+                    "type": "response.output_text.delta",
+                    "item_id": item_id,
+                    "output_index": output_index,
+                    "content_index": 0,
+                    "delta": text,
+                },
+            )
+        self.send_sse(
+            "response.output_text.done",
+            {
+                "type": "response.output_text.done",
+                "item_id": item_id,
+                "output_index": output_index,
+                "content_index": 0,
+                "text": text,
+            },
+        )
+        self.send_sse(
+            "response.content_part.done",
+            {
+                "type": "response.content_part.done",
+                "item_id": item_id,
+                "output_index": output_index,
+                "content_index": 0,
+                "part": part,
+            },
+        )
+        self.send_sse(
+            "response.output_item.done",
+            {"type": "response.output_item.done", "output_index": output_index, "item": done_item},
+        )
+
+    def emit_function_call(self, output_index: int, item: dict[str, Any]) -> None:
+        item_id = make_id("fc")
+        arguments = item.get("arguments", "{}")
+        added_item = {
+            "id": item_id,
+            "type": "function_call",
+            "status": "in_progress",
+            "call_id": item["call_id"],
+            "name": item["name"],
+            "arguments": "",
+        }
+        done_item = {**added_item, "status": "completed", "arguments": arguments}
+        self.send_sse(
+            "response.output_item.added",
+            {"type": "response.output_item.added", "output_index": output_index, "item": added_item},
+        )
+        if arguments:
+            self.send_sse(
+                "response.function_call_arguments.delta",
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "item_id": item_id,
+                    "output_index": output_index,
+                    "delta": arguments,
+                },
+            )
+        self.send_sse(
+            "response.function_call_arguments.done",
+            {
+                "type": "response.function_call_arguments.done",
+                "item_id": item_id,
+                "output_index": output_index,
+                "arguments": arguments,
+            },
+        )
+        self.send_sse(
+            "response.output_item.done",
+            {"type": "response.output_item.done", "output_index": output_index, "item": done_item},
+        )
+
+    def emit_completed(self, response_id: str, output_items: list[dict[str, Any]]) -> None:
+        response = response_object(response_id, self.server.model, "completed", output_items)
+        self.send_sse(
+            "response.completed",
+            {"type": "response.completed", "response": response},
+        )
+
+    def emit_failed(self, response_id: str, message: str) -> None:
+        response = response_object(response_id, self.server.model, "failed", [])
+        response["error"] = {"message": message}
+        self.send_sse(
+            "response.failed",
+            {"type": "response.failed", "response": response},
+        )
+
+
+def wants_stream(payload: dict[str, Any]) -> bool:
+    return bool(payload.get("stream", True))
+
+
+def count_list(value: Any) -> int:
+    return len(value) if isinstance(value, list) else 0
+
+
+def count_tool_results(value: Any) -> int:
+    if not isinstance(value, list):
+        return 0
+    return sum(
+        1
+        for item in value
+        if isinstance(item, dict) and item.get("type") == "function_call_output"
+    )
+
+
+def prompt_chars(messages: Any) -> int:
+    if not isinstance(messages, list):
+        return 0
+    return sum(len(content_to_text(message.get("content", ""))) for message in messages if isinstance(message, dict))
+
+
+def tool_names(tools: Any) -> str:
+    if not isinstance(tools, list):
+        return ""
+    names = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        function = tool.get("function")
+        if isinstance(function, dict) and isinstance(function.get("name"), str):
+            names.append(function["name"])
+    return ",".join(names)
+
+
+def output_summary(items: list[dict[str, Any]]) -> str:
+    parts = []
+    for item in items:
+        item_type = item.get("type")
+        if item_type == "function_call":
+            parts.append(f"tool:{item.get('name', 'unknown')}")
+        else:
+            parts.append(f"message:{len(item.get('text', ''))} chars")
+    return ",".join(parts) or "empty"
+
+
+def apply_agent_output_policy(
+    output_items: list[dict[str, Any]],
+    agent_mode: str,
+    tool_result_count: int,
+) -> list[dict[str, Any]]:
+    if agent_mode != "one-shot-exec":
+        return output_items
+
+    if tool_result_count > 0:
+        messages = [item for item in output_items if item.get("type") != "function_call"]
+        return messages or [{"type": "message", "text": "Done."}]
+
+    for item in output_items:
+        if item.get("type") == "function_call":
+            return [item]
+    return output_items
+
+
+def response_object(
+    response_id: str,
+    model: str,
+    status: str,
+    output_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "id": response_id,
+        "object": "response",
+        "created_at": int(time.time()),
+        "status": status,
+        "model": model,
+        "output": output_items,
+        "parallel_tool_calls": True,
+    }
+
+
+def responses_to_chat(
+    payload: dict[str, Any],
+    model: str,
+    max_tokens: int,
+    tool_mode: str,
+    context_mode: str,
+    agent_mode: str,
+    session_mode: str,
+    session_states: dict[str, dict[str, Any]],
+    session_key: str,
+    active_tool_results: int,
+) -> dict[str, Any]:
+    messages = []
+    has_tool_result = active_tool_results > 0
+    delta_prompt = delta_prompt_for_request(payload, context_mode, session_mode, session_states, session_key)
+    bridge_prompt = [
+        "You are running inside Codex CLI through the Sebas local-model bridge.",
+        "Use Codex tools when the user asks you to inspect files, edit files, or run terminal commands.",
+        "In terminal mode, use exec_command for file reads and edits.",
+        "To create or edit files, run shell commands with exec_command; do not use write_stdin.",
+        "When a tool is needed, output only the exact tool_call XML requested by the tool protocol.",
+        "Do not write any normal text before or after a tool_call.",
+        "After tool results are returned, continue normally.",
+    ]
+    if agent_mode == "one-shot-exec":
+        if has_tool_result:
+            bridge_prompt.extend(
+                [
+                    "Agent mode: one-shot-exec.",
+                    "A tool result has already been returned for this turn.",
+                    "Do not call any more tools. Answer with one short completion summary.",
+                ]
+            )
+        else:
+            bridge_prompt.extend(
+                [
+                    "Agent mode: one-shot-exec.",
+                    "For any request that can be completed from the terminal, make exactly one exec_command tool call.",
+                    "Put the full shell command in that single tool call, then stop.",
+                    "For file creation or edits, prefer a single heredoc command such as cat > path <<'EOF'.",
+                    "If you use a heredoc, include the complete file body and the closing EOF marker on its own line.",
+                    "Keep generated files compact enough to finish in one response; for browser demos, prefer a complete single-file implementation under about 120 lines.",
+                    "The tool_call body must be a JSON object like {\"cmd\":\"shell command\"}.",
+                    "Do not ask Codex to use write_stdin. Do not split work into multiple tool calls.",
+                ]
+            )
+    instructions = payload.get("instructions")
+    if context_mode == "full" and isinstance(instructions, str) and instructions.strip():
+        bridge_prompt.append(
+            "Compact Codex instructions:\n"
+            + compact_text(instructions.strip(), DEFAULT_SYSTEM_TEXT_CHARS)
+        )
+    messages.append({"role": "system", "content": "\n\n".join(bridge_prompt)})
+
+    for item in payload.get("input", []):
+        converted = response_input_item_to_chat(item, context_mode)
+        if converted:
+            messages.append(converted)
+
+    effective_tool_mode = "terminal" if agent_mode == "one-shot-exec" else tool_mode
+    tools = []
+    if not (agent_mode == "one-shot-exec" and has_tool_result):
+        tools = convert_codex_tools(payload.get("tools", []), effective_tool_mode)
+    chat_payload: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "max_completion_tokens": max_tokens,
+    }
+    if session_mode == "delta" and session_key:
+        chat_payload["session_id"] = session_key
+        chat_payload["session_mode"] = "reset"
+    if delta_prompt:
+        chat_payload["session_mode"] = "append"
+        chat_payload["sebas_prompt"] = delta_prompt
+    if tools:
+        chat_payload["tools"] = tools
+        chat_payload["tool_choice"] = convert_tool_choice(payload.get("tool_choice", "auto"))
+    return chat_payload
+
+
+def codex_session_key(
+    payload: dict[str, Any],
+    response_sessions: dict[str, str],
+    client_host: str,
+) -> str:
+    previous_response_id = payload.get("previous_response_id")
+    if isinstance(previous_response_id, str) and previous_response_id in response_sessions:
+        return response_sessions[previous_response_id]
+
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        for key in ("session_id", "codex_session_id", "conversation_id", "thread_id"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value:
+                return value
+
+    conversation = payload.get("conversation")
+    if isinstance(conversation, str) and conversation:
+        return conversation
+
+    return f"client:{client_host}"
+
+
+def delta_prompt_for_request(
+    payload: dict[str, Any],
+    context_mode: str,
+    session_mode: str,
+    session_states: dict[str, dict[str, Any]],
+    session_key: str,
+) -> str:
+    delta_items = delta_items_for_request(payload, session_mode, session_states, session_key)
+    if not delta_items:
+        return ""
+    return compile_delta_prompt(delta_items, context_mode)
+
+
+def active_tool_result_count(
+    payload: dict[str, Any],
+    session_mode: str,
+    session_states: dict[str, dict[str, Any]],
+    session_key: str,
+) -> int:
+    delta_items = delta_items_for_request(payload, session_mode, session_states, session_key)
+    if delta_items is not None:
+        return count_tool_results(delta_items)
+    return trailing_tool_result_count(payload.get("input", []))
+
+
+def delta_items_for_request(
+    payload: dict[str, Any],
+    session_mode: str,
+    session_states: dict[str, dict[str, Any]],
+    session_key: str,
+) -> list[Any] | None:
+    if session_mode != "delta" or not session_key:
+        return None
+    state = session_states.get(session_key)
+    if not state:
+        return None
+    items = payload.get("input", [])
+    if not isinstance(items, list):
+        return None
+    current = item_fingerprints(items)
+    previous = state.get("fingerprints")
+    if not isinstance(previous, list):
+        return None
+    common = common_prefix_len(previous, current)
+    return items[common:]
+
+
+def trailing_tool_result_count(value: Any) -> int:
+    if not isinstance(value, list):
+        return 0
+    count = 0
+    for item in reversed(value):
+        if isinstance(item, dict) and item.get("type") == "function_call_output":
+            count += 1
+            continue
+        break
+    return count
+
+
+def compile_delta_prompt(items: list[Any], context_mode: str) -> str:
+    lines = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        role = item.get("role")
+
+        if item_type == "function_call":
+            continue
+
+        if item_type == "function_call_output":
+            call_id = str(item.get("call_id") or item.get("id") or "call_1")
+            content = compact_text(
+                content_to_text(item.get("output", item.get("content", ""))),
+                DEFAULT_USER_TEXT_CHARS,
+            )
+            is_error = "true" if bool(item.get("is_error", False)) else "false"
+            if content:
+                lines.append(f"Tool result id={call_id} error={is_error}: {content}")
+            continue
+
+        if role or item_type == "message":
+            chat_role = str(role or "user")
+            if context_mode == "compact" and chat_role in {"developer", "system"}:
+                continue
+            if chat_role == "developer":
+                chat_role = "system"
+            if chat_role not in {"system", "user", "assistant", "tool"}:
+                chat_role = "user"
+            content = compact_message_content(
+                content_to_text(item.get("content", item.get("text", ""))),
+                str(role or item_type),
+                chat_role,
+            )
+            if content:
+                lines.append(f"{chat_role.capitalize()}: {content}")
+            continue
+
+        if item_type in {"input_text", "output_text"}:
+            content = compact_text(content_to_text(item), DEFAULT_USER_TEXT_CHARS)
+            if content:
+                lines.append(f"User: {content}")
+
+    if not lines:
+        return ""
+    return "\n" + "\n".join(lines) + "\nAssistant: "
+
+
+def item_fingerprints(items: list[Any]) -> list[str]:
+    return [json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) for item in items]
+
+
+def common_prefix_len(previous: list[Any], current: list[Any]) -> int:
+    limit = min(len(previous), len(current))
+    index = 0
+    while index < limit and previous[index] == current[index]:
+        index += 1
+    return index
+
+
+def remember_session_state(
+    session_mode: str,
+    session_states: dict[str, dict[str, Any]],
+    response_sessions: dict[str, str],
+    session_key: str,
+    response_id: str,
+    payload: dict[str, Any],
+    output_items: list[dict[str, Any]],
+) -> None:
+    if session_mode != "delta" or not session_key:
+        return
+    response_sessions[response_id] = session_key
+    input_items = payload.get("input", [])
+    if not isinstance(input_items, list):
+        input_items = []
+    session_states[session_key] = {
+        "fingerprints": item_fingerprints(input_items + output_items),
+        "updated_at": time.time(),
+    }
+
+
+def response_input_item_to_chat(item: Any, context_mode: str) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    item_type = item.get("type")
+    role = item.get("role")
+
+    if item_type == "function_call":
+        call_id = str(item.get("call_id") or item.get("id") or make_id("call"))
+        name = str(item.get("name") or "")
+        if not name:
+            return None
+        arguments = normalize_arguments(item.get("arguments", "{}"))
+        return {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": name, "arguments": arguments},
+                }
+            ],
+        }
+
+    if item_type == "function_call_output":
+        return {
+            "role": "tool",
+            "tool_call_id": str(item.get("call_id") or item.get("id") or "call_1"),
+            "content": content_to_text(item.get("output", item.get("content", ""))),
+            "is_error": bool(item.get("is_error", False)),
+        }
+
+    if role or item_type == "message":
+        chat_role = str(role or "user")
+        if context_mode == "compact" and chat_role in {"developer", "system"}:
+            return None
+        if chat_role == "developer":
+            chat_role = "system"
+        if chat_role not in {"system", "user", "assistant", "tool"}:
+            chat_role = "user"
+        content = content_to_text(item.get("content", item.get("text", "")))
+        content = compact_message_content(content, str(role or item_type), chat_role)
+        if not content:
+            return None
+        return {"role": chat_role, "content": content}
+
+    if item_type in {"input_text", "output_text"}:
+        return {"role": "user", "content": content_to_text(item)}
+
+    return None
+
+
+def content_to_text(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [content_to_text(part) for part in content]
+        return "\n".join(part for part in parts if part)
+    if isinstance(content, dict):
+        if "text" in content:
+            return content_to_text(content["text"])
+        if "output" in content:
+            return content_to_text(content["output"])
+        if "content" in content:
+            return content_to_text(content["content"])
+        return json.dumps(content, ensure_ascii=False)
+    return str(content)
+
+
+def compact_message_content(text: str, original_role: str, chat_role: str) -> str:
+    text = strip_large_codex_blocks(text)
+    if not text.strip():
+        return ""
+    if original_role == "developer" or chat_role == "system":
+        return compact_text(text, DEFAULT_SYSTEM_TEXT_CHARS)
+    if chat_role == "user":
+        return compact_text(text, DEFAULT_USER_TEXT_CHARS)
+    return compact_text(text, DEFAULT_USER_TEXT_CHARS)
+
+
+def strip_large_codex_blocks(text: str) -> str:
+    replacements = {
+        "permissions instructions": "Codex permissions and sandbox policy are enforced by Codex CLI.",
+        "skills_instructions": "Verbose Codex skill instructions omitted by Sebas bridge for local latency.",
+        "plugins_instructions": "Verbose Codex plugin instructions omitted by Sebas bridge for local latency.",
+        "apps_instructions": "Verbose Codex app instructions omitted by Sebas bridge for local latency.",
+        "collaboration_mode": "Codex collaboration mode details omitted by Sebas bridge for local latency.",
+    }
+    for tag, replacement in replacements.items():
+        text = re.sub(
+            rf"<{re.escape(tag)}>[\\s\\S]*?</{re.escape(tag)}>",
+            replacement,
+            text,
+            flags=re.IGNORECASE,
+        )
+    return text.strip()
+
+
+def compact_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    head = max_chars * 2 // 3
+    tail = max_chars - head
+    return text[:head].rstrip() + "\n[... Sebas bridge compacted context ...]\n" + text[-tail:].lstrip()
+
+
+def convert_codex_tools(tools: Any, tool_mode: str) -> list[dict[str, Any]]:
+    if not isinstance(tools, list):
+        return []
+    converted = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        if tool.get("type") == "function":
+            name = tool.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            if tool_mode == "terminal" and name not in TERMINAL_TOOL_NAMES:
+                continue
+            converted.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "description": compact_text(
+                            content_to_text(tool.get("description", "")),
+                            DEFAULT_TOOL_DESCRIPTION_CHARS,
+                        ),
+                        "parameters": compact_json_schema(
+                            tool.get("parameters", {"type": "object", "properties": {}})
+                        ),
+                    },
+                }
+            )
+    return converted
+
+
+def compact_json_schema(value: Any) -> Any:
+    if isinstance(value, list):
+        return [compact_json_schema(item) for item in value[:32]]
+    if not isinstance(value, dict):
+        return value
+
+    output: dict[str, Any] = {}
+    for key, child in value.items():
+        if key in {"description", "title", "$comment", "examples", "default"}:
+            continue
+        if key == "properties" and isinstance(child, dict):
+            output[key] = {
+                str(name): compact_json_schema(schema)
+                for name, schema in list(child.items())[:48]
+                if isinstance(name, str)
+            }
+            continue
+        if key == "enum" and isinstance(child, list):
+            output[key] = child[:32]
+            continue
+        output[key] = compact_json_schema(child)
+    return output
+
+
+def convert_tool_choice(choice: Any) -> Any:
+    if choice in (None, "auto", "none", "required"):
+        return choice or "auto"
+    if isinstance(choice, dict):
+        name = choice.get("name")
+        if isinstance(name, str) and name:
+            return {"type": "function", "function": {"name": name}}
+        function = choice.get("function")
+        if isinstance(function, dict) and isinstance(function.get("name"), str):
+            return {"type": "function", "function": {"name": function["name"]}}
+    return "auto"
+
+
+def post_chat_completion(backend: str, payload: dict[str, Any]) -> dict[str, Any]:
+    url = chat_completions_url(backend)
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    with request.urlopen(req, timeout=3600) as resp:  # noqa: S310 - local configured backend.
+        data = resp.read()
+    return json.loads(data.decode("utf-8"))
+
+
+def chat_completions_url(backend: str) -> str:
+    backend = backend.rstrip("/")
+    if backend.endswith("/chat/completions"):
+        return backend
+    return backend + "/chat/completions"
+
+
+def chat_to_response_items(chat_response: dict[str, Any], malformed_log: str) -> list[dict[str, Any]]:
+    choices = chat_response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return [{"type": "message", "text": ""}]
+
+    message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+    if not isinstance(message, dict):
+        return [{"type": "message", "text": ""}]
+
+    raw_tool_calls = message.get("tool_calls", [])
+    tool_calls = normalize_tool_calls(raw_tool_calls)
+    if tool_calls:
+        return tool_calls
+    if isinstance(raw_tool_calls, list) and raw_tool_calls:
+        log_malformed_tool_text(
+            json.dumps(raw_tool_calls, ensure_ascii=False, indent=2),
+            malformed_log,
+            "invalid structured tool_calls",
+        )
+        return [malformed_tool_message(malformed_log)]
+
+    content = message.get("content", "")
+    text = content_to_text(content)
+    fallback_calls = extract_tool_calls_from_text(text)
+    if fallback_calls:
+        return fallback_calls
+    if "<tool_call" in text:
+        log_malformed_tool_text(text, malformed_log, "malformed tool text")
+        return [malformed_tool_message(malformed_log)]
+    return [{"type": "message", "text": text}]
+
+
+def malformed_tool_message(malformed_log: str) -> dict[str, str]:
+    return {
+        "type": "message",
+        "text": (
+            "Sebas produced a malformed or unsafe tool call, so Codex could not run it. "
+            f"Debug log: {malformed_log}. Retry with a shorter request or increase --max-tokens."
+        ),
+    }
+
+
+def log_malformed_tool_text(text: str, malformed_log: str, reason: str) -> None:
+    compact = compact_text(text.replace("\n", "\\n"), 1000)
+    sys.stderr.write(f"[sebas-codex] {reason}: {compact}\n")
+    if not malformed_log:
+        return
+    try:
+        with open(malformed_log, "a", encoding="utf-8") as log_file:
+            log_file.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] {reason}\n")
+            log_file.write(text)
+            if not text.endswith("\n"):
+                log_file.write("\n")
+    except OSError as exc:
+        sys.stderr.write(f"[sebas-codex] could not write malformed log {malformed_log}: {exc}\n")
+
+
+def normalize_tool_calls(tool_calls: Any) -> list[dict[str, Any]]:
+    if not isinstance(tool_calls, list):
+        return []
+    output = []
+    for index, tool_call in enumerate(tool_calls, start=1):
+        if not isinstance(tool_call, dict):
+            continue
+        function = tool_call.get("function")
+        if isinstance(function, dict):
+            name = function.get("name")
+            arguments = function.get("arguments", "{}")
+        else:
+            name = tool_call.get("name")
+            arguments = tool_call.get("arguments", "{}")
+        if not isinstance(name, str) or not name:
+            continue
+        item = tool_call_item(index, str(tool_call.get("id") or f"call_{index}"), name, arguments)
+        if tool_call_is_safe(item):
+            output.append(item)
+    return output
+
+
+def extract_tool_calls_from_text(text: str) -> list[dict[str, Any]]:
+    json_calls = extract_tool_call_json(text)
+    if json_calls:
+        return json_calls
+
+    xml_calls = extract_tool_call_xml(text)
+    if xml_calls:
+        return xml_calls
+
+    return extract_incomplete_tool_call_xml(text)
+
+
+def extract_tool_call_json(text: str) -> list[dict[str, Any]]:
+    stripped = text.strip()
+    if not stripped.startswith("{"):
+        return []
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(parsed, dict):
+        tool_calls = normalize_tool_calls(parsed.get("tool_calls", []))
+        if tool_calls:
+            return tool_calls
+        name = parsed.get("name")
+        arguments = parsed.get("arguments", parsed)
+        if isinstance(name, str) and name:
+            return [tool_call_item(1, str(parsed.get("id") or "call_1"), name, arguments)]
+    return []
+
+
+def extract_tool_call_xml(text: str) -> list[dict[str, Any]]:
+    pattern = re.compile(r"<tool_call\b([^>]*)>([\s\S]*?)</tool_call>", re.MULTILINE)
+    output = []
+    for index, match in enumerate(pattern.finditer(text), start=1):
+        attrs, arguments = match.groups()
+        parsed_attrs = parse_xml_attrs(attrs)
+        name = parsed_attrs.get("name", "")
+        if not name:
+            continue
+        call_id = parsed_attrs.get("id", "") or f"call_{index}"
+        item = tool_call_item(index, call_id.strip() or f"call_{index}", name, arguments.strip() or "{}")
+        if is_json_object_string(item["arguments"]) and tool_call_is_safe(item):
+            output.append(item)
+    return output
+
+
+def extract_incomplete_tool_call_xml(text: str) -> list[dict[str, Any]]:
+    pattern = re.compile(r"<tool_call\b([^>]*)>([\s\S]*)", re.MULTILINE)
+    matches = list(pattern.finditer(text))
+    if not matches:
+        return []
+    attrs, tail = matches[-1].groups()
+    parsed_attrs = parse_xml_attrs(attrs)
+    name = parsed_attrs.get("name", "")
+    if not name:
+        return []
+    json_text = recover_first_json_object(tail)
+    arguments = json_text or tail
+    repaired = repair_tool_arguments(name, arguments)
+    if not is_json_object_string(repaired):
+        return []
+    item = tool_call_item(1, parsed_attrs.get("id", "") or "call_1", name, repaired)
+    return [item] if tool_call_is_safe(item) else []
+
+
+def parse_xml_attrs(attrs: str) -> dict[str, str]:
+    output = {}
+    pattern = re.compile(
+        r"([A-Za-z_:][A-Za-z0-9_.:-]*)\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s\"'>]+))"
+    )
+    for key, double_quoted, single_quoted, unquoted in pattern.findall(attrs):
+        output[key] = double_quoted or single_quoted or unquoted
+    return output
+
+
+def recover_first_json_object(text: str) -> str:
+    start = text.find("{")
+    if start < 0:
+        return ""
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text[start:], start=start):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                candidate = text[start : index + 1]
+                try:
+                    json.loads(candidate)
+                except json.JSONDecodeError:
+                    return ""
+                return candidate
+    return ""
+
+
+def normalize_arguments(arguments: Any) -> str:
+    if isinstance(arguments, str):
+        stripped = arguments.strip()
+        return stripped if stripped else "{}"
+    if isinstance(arguments, (dict, list)):
+        return json.dumps(arguments, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(arguments, ensure_ascii=False)
+
+
+def tool_call_item(index: int, call_id: str, name: str, arguments: Any) -> dict[str, Any]:
+    return {
+        "type": "function_call",
+        "call_id": call_id.strip() or f"call_{index}",
+        "name": name.strip(),
+        "arguments": repair_tool_arguments(name, arguments),
+    }
+
+
+def tool_call_is_safe(item: dict[str, Any]) -> bool:
+    if item.get("name") != "exec_command":
+        return True
+    try:
+        parsed = json.loads(item.get("arguments", "{}"))
+    except (TypeError, json.JSONDecodeError):
+        return False
+    command = (parsed.get("cmd") or parsed.get("command")) if isinstance(parsed, dict) else ""
+    if not isinstance(command, str) or not command.strip():
+        return False
+    return shell_command_is_complete(command)
+
+
+def repair_tool_arguments(name: str, arguments: Any) -> str:
+    normalized = normalize_arguments(arguments)
+    if is_json_object_string(normalized):
+        return normalized
+    if name.strip() == "exec_command":
+        command = recover_exec_command(arguments)
+        if command:
+            return json.dumps({"cmd": command}, ensure_ascii=False, separators=(",", ":"))
+    return normalized
+
+
+def is_json_object_string(value: str) -> bool:
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return False
+    return isinstance(parsed, dict)
+
+
+def recover_exec_command(arguments: Any) -> str:
+    text = content_to_text(arguments).strip()
+    if not text:
+        return ""
+
+    text = re.sub(r"</?tool_call\b[^>]*>", "", text).strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        command = parsed.get("cmd") or parsed.get("command")
+        if isinstance(command, str) and command.strip():
+            return command if shell_command_is_complete(command) else ""
+
+    command = recover_loose_command_field(text, "cmd") or recover_loose_command_field(text, "command")
+    if command:
+        return command if shell_command_is_complete(command) else ""
+
+    candidate = re.sub(
+        r"^\s*\{?\s*['\"]?(?:cmd|command)['\"]?\s*:\s*['\"]?",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    ).strip()
+    candidate = unescape_loose_json_string(strip_loose_json_tail(candidate))
+    if looks_like_shell_command(candidate) and shell_command_is_complete(candidate):
+        return candidate
+    return ""
+
+
+def recover_loose_command_field(text: str, field: str) -> str:
+    match = re.search(rf"['\"]?{re.escape(field)}['\"]?\s*:", text, flags=re.IGNORECASE)
+    if not match:
+        return ""
+    rest = text[match.end() :].lstrip()
+    if not rest:
+        return ""
+    if rest[0] in {'"', "'"}:
+        rest = rest[1:]
+    return unescape_loose_json_string(strip_loose_json_tail(rest))
+
+
+def strip_loose_json_tail(value: str) -> str:
+    value = value.strip()
+    value = re.sub(r"</tool_call>\s*$", "", value)
+    value = value.strip()
+    for _ in range(2):
+        if value.endswith("}") and value.count("{") <= value.count("}"):
+            value = value[:-1].rstrip()
+    if value.endswith(("'", '"')):
+        value = value[:-1].rstrip()
+    return value
+
+
+def unescape_loose_json_string(value: str) -> str:
+    return (
+        value.replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\r", "\n")
+        .replace("\\t", "\t")
+        .replace('\\"', '"')
+        .replace("\\'", "'")
+        .replace("\\\\", "\\")
+    )
+
+
+def looks_like_shell_command(value: str) -> bool:
+    stripped = value.strip()
+    if not stripped:
+        return False
+    starters = (
+        "cat ",
+        "cat>",
+        "printf ",
+        "tee ",
+        "python",
+        "node ",
+        "npm ",
+        "pnpm ",
+        "mkdir ",
+        "touch ",
+        "echo ",
+        "sed ",
+        "perl ",
+        "ruby ",
+        "sh ",
+        "bash ",
+        "/bin/",
+    )
+    return stripped.startswith(starters) or "\n" in stripped
+
+
+def shell_command_is_complete(command: str) -> bool:
+    return not has_unclosed_heredoc(command) and not has_empty_heredoc(command)
+
+
+def has_unclosed_heredoc(command: str) -> bool:
+    pattern = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+    lines = command.splitlines()
+    for line_index, line in enumerate(lines):
+        for match in pattern.finditer(line):
+            marker = match.group(2)
+            if not any(candidate.strip() == marker for candidate in lines[line_index + 1 :]):
+                return True
+    return False
+
+
+def has_empty_heredoc(command: str) -> bool:
+    pattern = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+    lines = command.splitlines()
+    for line_index, line in enumerate(lines):
+        for match in pattern.finditer(line):
+            marker = match.group(2)
+            close_index = next(
+                (
+                    candidate_index
+                    for candidate_index, candidate in enumerate(lines[line_index + 1 :], start=line_index + 1)
+                    if candidate.strip() == marker
+                ),
+                None,
+            )
+            if close_index is None:
+                continue
+            body = lines[line_index + 1 : close_index]
+            if not any(body_line.strip() for body_line in body):
+                return True
+    return False
+
+
+def make_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:24]}"
+
+
+def parse_listen(value: str) -> tuple[str, int]:
+    if ":" not in value:
+        raise ValueError("--listen must be HOST:PORT")
+    host, port = value.rsplit(":", 1)
+    return host, int(port)
+
+
+def main() -> int:
+    args = parse_args()
+    host, port = parse_listen(args.listen)
+    server = SebasCodexServer((host, port), Handler)
+    server.backend = args.backend
+    server.model = args.model
+    server.max_tokens = args.max_tokens
+    server.tool_mode = args.tool_mode
+    server.context_mode = args.context_mode
+    server.agent_mode = args.agent_mode
+    server.session_mode = args.session_mode
+    server.heartbeat_seconds = args.heartbeat_seconds
+    server.malformed_log = args.malformed_log
+    server.session_states = {}
+    server.response_sessions = {}
+    print(
+        f"Sebas Codex bridge listening on http://{args.listen}/v1 "
+        f"-> {chat_completions_url(args.backend)} "
+        f"(tool_mode={args.tool_mode}, context_mode={args.context_mode}, "
+        f"agent_mode={args.agent_mode}, session_mode={args.session_mode}, "
+        f"max_tokens={args.max_tokens}, heartbeat_seconds={args.heartbeat_seconds}, "
+        f"malformed_log={args.malformed_log})",
+        flush=True,
+    )
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nSebas Codex bridge stopped.", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (error.URLError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)

@@ -12,7 +12,8 @@ weights from SSD instead of trying to keep the whole model resident in memory.
 Sebas is focused on one thing: a local Apple Silicon inference path for a
 Qwen3.5 MoE model that does not fit a standard resident-model runtime. The Rust
 CLI is a thin operational wrapper for local chat, demo, doctor, and benchmark
-commands.
+commands, plus an experimental Codex CLI bridge for using the local model as a
+Responses-compatible provider.
 
 ## Demo
 
@@ -134,6 +135,9 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 ./sebas engine bench --engine qwen122b
 ./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
 ./sebas run engine-only --engine qwen122b
+./sebas codex config --engine qwen122b
+./sebas codex proxy --engine qwen122b
+./sebas codex proxy --engine qwen122b --one-shot-exec --session-mode delta
 ```
 
 For a full 122B setup from the source MLX model, see
@@ -151,6 +155,7 @@ fully clarified.
 | `.workspace.example/` | Example local engine manifest; copy to `.workspace/` for local runs |
 | `docs/qwen122b-runbook.md` | Public 122B setup and benchmark runbook |
 | `docs/qwen122b-porting.md` | Public 122B architecture and measurement notes |
+| `docs/codex-bridge.md` | Experimental Codex CLI bridge setup |
 | `tools/` | Thin operational wrappers |
 | `docs/` | Workspace architecture notes |
 | `engines/` | External engine ownership and layout notes |
@@ -164,6 +169,7 @@ Working today:
 - Qwen3.5-122B-A10B text-only inference path
 - MacBook Air 16 GB bring-up with measured prefill/decode numbers
 - `./sebas` local chat and CLI wrapper for engine operation
+- experimental Codex CLI bridge through a local Responses API proxy
 - Qwen35B and Qwen122B engine selection paths
 - benchmark and doctor commands
 
@@ -186,6 +192,7 @@ Related docs:
 - [Installing Sebas](docs/install.md)
 - [Qwen3.5-122B porting notes](docs/qwen122b-porting.md)
 - [Qwen3.5-122B runbook](docs/qwen122b-runbook.md)
+- [Codex CLI bridge](docs/codex-bridge.md)
 - [Reproducibility pack workflow](docs/qwen122b-repro-pack.md)
 - [Tracked benchmark summaries](benchmarks/qwen122b/)
 - [Workspace architecture](docs/WORKSPACE_ARCHITECTURE.md)

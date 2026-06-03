@@ -8,7 +8,7 @@
 
 Sebas 可以在 16GB MacBook Air 上本地运行 Qwen3.5-122B-A10B。它不是把整个模型常驻进内存，而是从 SSD 按需流式读取 MoE expert weights。
 
-Sebas 专注于一件事：在 Apple Silicon 上运行难以放进标准常驻式 runtime 的 Qwen3.5 MoE 模型。Rust CLI 只是用于 local chat、demo、doctor 和 benchmark 的轻量 operational wrapper。
+Sebas 专注于一件事：在 Apple Silicon 上运行难以放进标准常驻式 runtime 的 Qwen3.5 MoE 模型。Rust CLI 只是用于 local chat、demo、doctor 和 benchmark 的轻量 operational wrapper，并带有一个 experimental Codex CLI bridge，可把本地模型作为 Responses-compatible provider 使用。
 
 ## 演示
 
@@ -111,6 +111,9 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 ./sebas engine bench --engine qwen122b
 ./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
 ./sebas run engine-only --engine qwen122b
+./sebas codex config --engine qwen122b
+./sebas codex proxy --engine qwen122b
+./sebas codex proxy --engine qwen122b --one-shot-exec --session-mode delta
 ```
 
 从 source MLX model 完整准备 122B path 的步骤见 [qwen122b-runbook.md](docs/qwen122b-runbook.md)。当前 public umbrella repo 跟踪 Sebas CLI 和文档。Flash-MoE engine checkout 暂时放在 tracked tree 外，直到再发布和 upstream license terms 完全明确。
@@ -124,6 +127,7 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 | `.workspace.example/` | local engine manifest 示例；复制到 `.workspace/` 后使用 |
 | `docs/qwen122b-runbook.md` | public 122B setup and benchmark runbook |
 | `docs/qwen122b-porting.md` | public 122B architecture and measurement notes |
+| `docs/codex-bridge.md` | experimental Codex CLI bridge setup |
 | `tools/` | thin operational wrappers |
 | `docs/` | workspace architecture notes |
 | `engines/` | external engine ownership and layout notes |
@@ -137,6 +141,7 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 - Qwen3.5-122B-A10B text-only inference path
 - MacBook Air 16GB bring-up，以及实测 prefill/decode 数据
 - 用于 local chat 和 engine operation 的 `./sebas` CLI wrapper
+- 通过 local Responses API proxy 使用的 experimental Codex CLI bridge
 - Qwen35B 和 Qwen122B engine selection paths
 - benchmark and doctor commands
 
@@ -157,6 +162,7 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 - [Installing Sebas](docs/install.md)
 - [Qwen3.5-122B porting notes](docs/qwen122b-porting.md)
 - [Qwen3.5-122B runbook](docs/qwen122b-runbook.md)
+- [Codex CLI bridge](docs/codex-bridge.md)
 - [Reproducibility pack workflow](docs/qwen122b-repro-pack.md)
 - [Tracked benchmark summaries](benchmarks/qwen122b/)
 - [Workspace architecture](docs/WORKSPACE_ARCHITECTURE.md)
