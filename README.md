@@ -35,8 +35,9 @@ The installer copies `sebas` to `~/.local/bin` by default. See
 [install.md](docs/install.md) for release tags, custom install paths, PATH
 setup, and source-build fallback.
 
-This installs the CLI only. The 122B path still needs a prepared model and the
-external engine checkout described in [qwen122b-runbook.md](docs/qwen122b-runbook.md).
+This installs the CLI only. Fresh 122B setup is currently blocked by the missing
+verified engine/preparation release. Read the [122B runbook](docs/qwen122b-runbook.md)
+before downloading model weights.
 
 ## Current Proof Point
 
@@ -115,36 +116,22 @@ sebas
 
 ## Local Engine Setup
 
-Sebas does not vendor or redistribute Flash-MoE engine code. If you choose to
-use a compatible external engine checkout, review the upstream repository and
-its license status yourself before use:
+**The public 122B setup is incomplete.** The benchmark used a modified local
+Flash-MoE engine. A verified public 122B engine and preparation scripts have not
+been identified; cloning the current Anemll default branch does not provide them.
 
-```bash
-git clone https://github.com/Anemll/flash-moe flash-moe-anemll-ios
-```
+The original scripts and supporting source have been located in a private archive.
+Redistribution terms and clean-build reproducibility still need verification.
 
-For local engine commands, create a local workspace manifest first:
+The source is already MLX 4-bit safetensors. It needs packing for a matching
+custom engine, not a GGUF conversion. See the [122B runbook](docs/qwen122b-runbook.md)
+for the exact model source, download-only commands, missing prerequisites and
+instructions for connecting an already prepared compatible installation. Resolve
+the engine prerequisite before downloading the large model.
 
-```bash
-mkdir -p .workspace
-cp .workspace.example/manifest.json .workspace/manifest.json
-cp .workspace.example/system-no-think.md .workspace/system-no-think.md
-
-./sebas engine doctor --engine qwen122b
-./sebas chat
-./sebas engine bench --engine qwen122b
-./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
-./sebas run engine-only --engine qwen122b
-./sebas codex config --engine qwen122b
-./sebas codex proxy --engine qwen122b
-./sebas codex proxy --engine qwen122b --one-shot-exec --session-mode delta
-```
-
-For a full 122B setup from the source MLX model, see
-[qwen122b-runbook.md](docs/qwen122b-runbook.md). The current public umbrella
-repo tracks the Sebas CLI and documentation. The Flash-MoE engine checkout is
-kept outside the tracked tree until redistribution and upstream license terms are
-fully clarified.
+Sebas publishes the CLI and historical benchmark evidence. It does not bundle
+model weights or the engine. Engine redistribution terms remain unconfirmed;
+see [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## What This Repository Contains
 
@@ -185,7 +172,8 @@ Still experimental:
 
 The inference work builds on Flash-MoE and the idea that very large MoE models
 can run on small local machines when expert weights are streamed on demand. The
-Anemll fork extends that direction for Apple Silicon and the 122B Qwen3.5 path.
+Anemll fork develops the Apple Silicon engine. Sebas's recorded 122B path used
+additional local changes; a matching public engine release has not been verified.
 
 Related docs:
 

@@ -267,25 +267,36 @@ pub fn ensure_engine_ready(runtime: &EngineRuntime) -> Result<(), String> {
 
 pub fn print_engine_doctor(runtime: &EngineRuntime) -> Result<(), String> {
     let mut failures = Vec::new();
-    if !runtime.infer_bin.exists() {
+    if !runtime.repo_path.is_dir() {
         failures.push(format!(
-            "missing infer binary: {}",
+            "engine repo is missing or not a directory: {}",
+            runtime.repo_path.display()
+        ));
+    }
+    if !runtime.infer_bin.is_file() {
+        failures.push(format!(
+            "infer binary is missing or not a regular file: {}",
             runtime.infer_bin.display()
         ));
     }
     if !runtime.model_dir.is_dir() {
         failures.push(format!(
-            "missing model dir: {}",
+            "model dir is missing or not a directory: {}",
             runtime.model_dir.display()
         ));
+    }
+    for action in ["run", "bench"] {
+        let script = engine_helper_path(runtime, action);
+        if !script.is_file() {
+            failures.push(helper_script_failure(&script));
+        }
     }
 
     if failures.is_empty() {
         println!(
-            "OK  {}: {} -> :{}",
+            "OK  {}: path checks only\n  Model dir: {}\n  Not verified: model layout, engine compatibility, or inference.",
             runtime.engine.as_cli_label(),
-            runtime.model_dir.display(),
-            runtime.port
+            runtime.model_dir.display()
         );
         return Ok(());
     }
@@ -293,6 +304,7 @@ pub fn print_engine_doctor(runtime: &EngineRuntime) -> Result<(), String> {
     for failure in failures {
         println!("FAIL  {}: {}", runtime.engine.as_cli_label(), failure);
     }
+    print!("{}", engine_preparation_hint(runtime.engine));
     Err(format!(
         "doctor failed for {}",
         runtime.engine.as_cli_label()
@@ -344,16 +356,7 @@ fn run_bench_once(
     lang: &str,
     passthrough: &[String],
 ) -> Result<(), String> {
-    let script = match runtime.engine {
-        EngineKind::Qwen35b => root_dir
-            .join("flash-moe-anemll-ios")
-            .join("scripts")
-            .join("bench_35b.sh"),
-        EngineKind::Qwen122b => root_dir
-            .join("flash-moe-anemll-ios")
-            .join("scripts")
-            .join("bench_122b.sh"),
-    };
+    let script = require_engine_helper(runtime, "bench")?;
     println!("== language suite: {lang} ==");
     let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
     let mut command = Command::new(&script);
@@ -429,16 +432,7 @@ fn run_demo_inner(
     passthrough: &[String],
     show_header: bool,
 ) -> Result<(), String> {
-    let script = match runtime.engine {
-        EngineKind::Qwen35b => root_dir
-            .join("flash-moe-anemll-ios")
-            .join("scripts")
-            .join("run_35b.sh"),
-        EngineKind::Qwen122b => root_dir
-            .join("flash-moe-anemll-ios")
-            .join("scripts")
-            .join("run_122b.sh"),
-    };
+    let script = require_engine_helper(runtime, "run")?;
     let infer_dir = runtime.infer_bin.parent().unwrap_or(root_dir);
     if show_header {
         print_demo_header(runtime);
@@ -476,6 +470,44 @@ fn run_demo_inner(
         Ok(())
     } else {
         Err(format!("demo failed for {}", runtime.engine.as_cli_label()))
+    }
+}
+
+fn engine_helper_path(runtime: &EngineRuntime, action: &str) -> PathBuf {
+    let size = match runtime.engine {
+        EngineKind::Qwen35b => "35b",
+        EngineKind::Qwen122b => "122b",
+    };
+    runtime
+        .repo_path
+        .join("scripts")
+        .join(format!("{action}_{size}.sh"))
+}
+
+fn helper_script_failure(script: &Path) -> String {
+    format!(
+        "engine helper script is missing or not a regular file: {}",
+        script.display()
+    )
+}
+
+fn require_engine_helper(runtime: &EngineRuntime, action: &str) -> Result<PathBuf, String> {
+    let script = engine_helper_path(runtime, action);
+    if script.is_file() {
+        Ok(script)
+    } else {
+        Err(format!(
+            "{}{}",
+            helper_script_failure(&script),
+            engine_preparation_hint(runtime.engine)
+        ))
+    }
+}
+
+fn engine_preparation_hint(engine: EngineKind) -> &'static str {
+    match engine {
+        EngineKind::Qwen35b => "",
+        EngineKind::Qwen122b => "\nSee docs/qwen122b-runbook.md for compatible 122B engine and model preparation requirements.\n",
     }
 }
 

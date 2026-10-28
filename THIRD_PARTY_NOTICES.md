@@ -17,24 +17,34 @@ It is intentionally conservative:
 - The previous experimental runtime layer was removed from the tracked workspace
 - Sebas-specific Rust code is offered under the root MIT license
 
-### `flash-moe/`
+### External Flash-MoE engines (not included)
 
-- Upstream repository: [`danveloper/flash-moe`](https://github.com/danveloper/flash-moe)
-- This workspace keeps the repository at its existing path so the upstream history stays intact
-- The upstream README describes the Flash-MoE laptop inference project and the paper-backed implementation details
-- No separate top-level license file is tracked in this workspace copy
-- The current GitHub page snapshot does not show a LICENSE file in the repository root
-- Treat reuse or redistribution as license-unclear until the upstream project is checked directly
+The historical local workspace used `flash-moe/` and
+`flash-moe-anemll-ios/`. Neither source tree is distributed in this public Sebas
+repository. Inspection on 2026-10-28 covered:
 
-### `flash-moe-anemll-ios/`
+- [`danveloper/flash-moe` at `3601d418`](https://github.com/danveloper/flash-moe/tree/3601d41882a346d85041f7955c66429d248e8cd9).
+- [`Anemll/flash-moe`, `m5-nax` at `26cd7f84`](https://github.com/Anemll/flash-moe/tree/26cd7f841823ea255ad6996d96692102852fa591),
+  plus `iOS-App` (`9d1d602b`), `main` (`20f85917`) and
+  `ASTC-experiments` (`5e8ba26c`).
 
-- Upstream repository: [`Anemll/flash-moe`](https://github.com/Anemll/flash-moe)
-- The workspace copy preserves the fork history and the existing path layout
-- The README identifies this tree as a fork of [`danveloper/flash-moe`](https://github.com/danveloper/flash-moe)
-- The README also cites `ncdrone/rustane` as the source of the `--cache-io-split` fanout idea
-- No separate top-level license file is tracked in this workspace copy
-- The current GitHub page snapshot does not show a LICENSE file in the repository root
-- Treat reuse or redistribution as license-unclear until the upstream and fork-history terms are checked directly
+No `LICENSE` or `COPYING` file was found in those trees. The inspected default
+branch READMEs identify the projects and fork relationship, but do not supply an
+explicit redistribution grant. Treat reuse and redistribution as unconfirmed;
+public source availability alone does not resolve the terms. Obtain the relevant
+permissions before copying the engine or its derivatives into a release.
+
+The Anemll README also attributes cached-read fanout work to
+[`ncdrone/rustane`](https://github.com/ncdrone/rustane). Rights for incorporated
+contributions need separate review; no conclusion about that code's terms is
+made here.
+
+The local 122B helper scripts and supporting source have been located in the
+maintainer's private archive and inspected statically. The archive's own notices
+also mark the external engines' redistribution terms as unconfirmed. Recovery
+does not establish a redistribution grant or a complete reproducible release.
+Origin, permissions and private data still require review before publication.
+This documentation fix adds no engine or conversion code. See the [122B runbook](docs/qwen122b-runbook.md).
 
 ### Qwen model sources
 

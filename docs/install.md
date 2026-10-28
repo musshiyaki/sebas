@@ -10,8 +10,10 @@ source build.
 - `curl` or `wget`
 
 The CLI install does not download model weights or install the external
-Flash-MoE engine checkout. The 122B inference path still requires the local
-workspace setup in [qwen122b-runbook.md](qwen122b-runbook.md).
+Flash-MoE engine checkout. A verified public 122B engine and preparation pipeline
+have not been identified, so installing the CLI does not currently enable a fresh
+122B setup. Read the prerequisites and download-only instructions in the
+[122B runbook](qwen122b-runbook.md) before obtaining model weights.
 
 ## Install Latest Release
 
