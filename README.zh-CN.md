@@ -28,7 +28,7 @@ sebas
 
 安装器默认会把 `sebas` 复制到 `~/.local/bin`。release tag、自定义安装目录、PATH 设置和源码构建 fallback 请参考 [install.md](docs/install.md)。
 
-这个命令只安装 CLI。122B path 仍然需要 prepared model 和外部 engine checkout，具体见 [qwen122b-runbook.md](docs/qwen122b-runbook.md)。
+这个命令只安装 CLI。目前尚未确认兼容 engine 和准备流程的公开版本，因此无法完成全新的 122B 安装。下载模型前请阅读 [122B runbook](docs/qwen122b-runbook.md)。
 
 ## 当前验证结果
 
@@ -92,31 +92,20 @@ sebas
 
 ## 本地 engine setup
 
-Sebas 不会 vendor 或重新分发 Flash-MoE engine code。如果你选择使用兼容的外部
-engine checkout，请先自行检查 upstream repository 及其 license status。
+**公开的 122B 安装流程尚不完整。** 基准测试使用了本地修改的 Flash-MoE engine。
+目前尚未确认可公开获取且经过验证的 122B engine 和准备脚本；克隆 Anemll 当前的
+默认分支并不能获取这些组件。
 
-```bash
-git clone https://github.com/Anemll/flash-moe flash-moe-anemll-ios
-```
+原始脚本和相关源码已在私有归档中找到。再分发条件和从干净环境开始的可复现性
+仍待确认。
 
-使用 local engine commands 前，先创建 local workspace manifest：
+源模型已经是 MLX 4-bit safetensors。仍需为匹配的自定义 engine 进行打包，而非转换
+为 GGUF。[122B runbook](docs/qwen122b-runbook.md) 列出了模型来源、仅下载源文件的
+命令、缺失的前提条件，以及连接已准备好的兼容环境的方法。请先解决 engine 的获取
+问题，再下载大容量模型。
 
-```bash
-mkdir -p .workspace
-cp .workspace.example/manifest.json .workspace/manifest.json
-cp .workspace.example/system-no-think.md .workspace/system-no-think.md
-
-./sebas engine doctor --engine qwen122b
-./sebas chat
-./sebas engine bench --engine qwen122b
-./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
-./sebas run engine-only --engine qwen122b
-./sebas codex config --engine qwen122b
-./sebas codex proxy --engine qwen122b
-./sebas codex proxy --engine qwen122b --one-shot-exec --session-mode delta
-```
-
-从 source MLX model 完整准备 122B path 的步骤见 [qwen122b-runbook.md](docs/qwen122b-runbook.md)。当前 public umbrella repo 跟踪 Sebas CLI 和文档。Flash-MoE engine checkout 暂时放在 tracked tree 外，直到再发布和 upstream license terms 完全明确。
+本仓库公开 CLI 和历史基准数据，不包含模型权重或 engine。engine 的再分发条件尚未
+确认，详见 [Third-party notices](THIRD_PARTY_NOTICES.md)。
 
 ## 仓库内容
 
@@ -155,7 +144,7 @@ cp .workspace.example/system-no-think.md .workspace/system-no-think.md
 
 ## 背景
 
-这项推理工作基于 Flash-MoE，以及一个核心想法：如果 expert weights 可以按需流式读取，非常大的 MoE 模型也可以在小型本地机器上运行。Anemll fork 把这个方向扩展到了 Apple Silicon 和 122B Qwen3.5 path。
+这项推理工作基于 Flash-MoE，以及一个核心想法：如果 expert weights 可以按需流式读取，非常大的 MoE 模型也可以在小型本地机器上运行。Anemll fork 开发 Apple Silicon engine。Sebas 的 122B 基准测试还使用了额外的本地修改，目前尚未确认对应的公开 engine 版本。
 
 相关文档：
 

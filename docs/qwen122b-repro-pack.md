@@ -58,10 +58,20 @@ Every public benchmark pack should therefore capture:
 - the Sebas wrapper commit SHA
 - the exact command output from `sebas engine doctor --engine qwen122b`
 
-If the engine checkout has local changes, keep them in the pack rather than
-editing the evidence away. For launch-quality results, also attach the generated
-pack to a GitHub Release so reviewers can inspect the raw logs without cloning
-private local state.
+If the engine checkout has local changes, preserve the dirty-state evidence.
+A SHA plus a dirty flag cannot reproduce those changes. Review local patches,
+untracked preparation helpers, licenses and private data before any publication;
+do not automatically put unpublished engine code in a public pack. A reproducible
+release needs an obtainable engine revision containing every required change,
+plus the model revision, preparation versions and output validation.
+
+The 2026-06-01 pack records a dirty engine at `87ca06bb6babadf3673b85a28ce64ecb20894abe`.
+The original scripts and supporting source have now been located in a private
+archive, but the archived runtime source includes changes after the measurement
+date. A corresponding complete public source/preparation release and an exact
+match to the measured dirty tree have not been verified.
+See the [runbook](qwen122b-runbook.md) for the current blocker. The existing pack
+is historical measurement evidence, not a clean-checkout reproduction recipe.
 
 ## Publish A Pack
 

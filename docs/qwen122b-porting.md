@@ -7,6 +7,9 @@ Sebas targets a text-only Apple Silicon inference path for
 resident in 16 GB of unified memory. The goal is to keep the active dense path
 small and stream routed MoE expert weights from SSD on demand.
 
+These notes describe the historical local port. They are not a complete public
+implementation or conversion recipe. See the [current setup status](qwen122b-runbook.md).
+
 ## Model Shape
 
 The 122B path was derived from the model `config.json` and safetensors metadata

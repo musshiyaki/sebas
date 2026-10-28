@@ -29,7 +29,7 @@ sebas
 
 デフォルトでは `sebas` は `~/.local/bin` にコピーされます。release tag、インストール先の変更、PATH 設定、ソースビルド fallback については [install.md](docs/install.md) を参照してください。
 
-この手順で入るのは CLI のみです。122B path には、[qwen122b-runbook.md](docs/qwen122b-runbook.md) に書かれている prepared model と外部 engine checkout が必要です。
+この手順で入るのは CLI のみです。互換 engine と準備処理の公開版が未確認のため、122B の新規導入はまだ完了できません。モデルをダウンロードする前に [122B runbook](docs/qwen122b-runbook.md) を確認してください。
 
 ## 現在の実証結果
 
@@ -93,32 +93,21 @@ sebas
 
 ## ローカル engine setup
 
-Sebas は Flash-MoE engine code を同梱・再配布しません。互換性のある外部
-engine checkout を使う場合は、利用前に upstream repository と license status
-を自分で確認してください。
+**公開版だけで 122B の導入を完了する手順は、まだ揃っていません。**
+ベンチマークにはローカルで変更した Flash-MoE engine を使用しています。
+互換 engine と準備スクリプトの公開配布元は確認できておらず、現在の Anemll の
+デフォルトブランチを clone するだけでは入手できません。
 
-```bash
-git clone https://github.com/Anemll/flash-moe flash-moe-anemll-ios
-```
+元のスクリプトと関連ソースは私有アーカイブで見つかりました。再配布条件と、
+クリーンな環境からの再現性は引き続き未確認です。
 
-local engine commands を使うには、まず local workspace manifest を作成します。
+モデルは既に MLX 4-bit safetensors です。必要なのは対応する独自 engine 用の
+パッキングであり、GGUF への変換ではありません。[122B runbook](docs/qwen122b-runbook.md)
+にモデルの入手元、ダウンロードのみの手順、足りない前提条件、準備済みの互換環境を
+接続する方法を記載しています。大容量モデルを入手する前に engine の準備条件を確認してください。
 
-```bash
-mkdir -p .workspace
-cp .workspace.example/manifest.json .workspace/manifest.json
-cp .workspace.example/system-no-think.md .workspace/system-no-think.md
-
-./sebas engine doctor --engine qwen122b
-./sebas chat
-./sebas engine bench --engine qwen122b
-./sebas engine bench --engine qwen122b --lang all --case all --long-tokens 160
-./sebas run engine-only --engine qwen122b
-./sebas codex config --engine qwen122b
-./sebas codex proxy --engine qwen122b
-./sebas codex proxy --engine qwen122b --one-shot-exec --session-mode delta
-```
-
-source MLX model からの full 122B setup は [qwen122b-runbook.md](docs/qwen122b-runbook.md) を参照してください。現在の public umbrella repo は Sebas CLI と documentation を追跡しています。Flash-MoE engine checkout は、再配布と upstream license terms が十分に整理されるまで tracked tree の外に置いています。
+このリポジトリは CLI と過去の計測結果を公開しています。モデル本体や engine は同梱せず、
+engine の再配布条件は未確認です。[Third-party notices](THIRD_PARTY_NOTICES.md) を参照してください。
 
 ## この repository に含まれるもの
 
@@ -157,7 +146,7 @@ source MLX model からの full 122B setup は [qwen122b-runbook.md](docs/qwen12
 
 ## 背景
 
-この推論 work は Flash-MoE と、「expert weights をオンデマンドに stream すれば、非常に大きな MoE models も小さな local machines で動かせる」という考え方に基づいています。Anemll fork はその方向性を Apple Silicon と 122B Qwen3.5 path に拡張しています。
+この推論 work は Flash-MoE と、「expert weights をオンデマンドに stream すれば、非常に大きな MoE models も小さな local machines で動かせる」という考え方に基づいています。Anemll fork は Apple Silicon 向け engine を開発しています。Sebas の 122B 計測では追加のローカル変更を使用しており、それに対応する公開 engine は未確認です。
 
 関連 docs:
 
